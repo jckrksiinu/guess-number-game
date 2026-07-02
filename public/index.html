@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎯 เกมทายเลข ออนไลน์</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Particle Background -->
+  <div id="particles-bg"></div>
+
+  <div id="app">
+    <!-- ============ LOGIN SCREEN ============ -->
+    <div id="login-screen" class="screen active">
+      <div class="login-container">
+        <div class="logo-section">
+          <div class="logo-icon">🎯</div>
+          <h1 class="logo-title">เกมทายเลข</h1>
+          <p class="logo-subtitle">Multiplayer Number Guessing Game</p>
+        </div>
+        <div class="login-card glass">
+          <h2>เข้าสู่ระบบ</h2>
+          <p class="login-desc">ลงทะเบียนหรือเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน</p>
+          <div class="login-form">
+            <div class="input-field">
+              <label>👤 ชื่อผู้ใช้</label>
+              <input type="text" id="username-input" placeholder="ใส่ชื่อผู้เล่น..." maxlength="15" autocomplete="off">
+            </div>
+            <div class="input-field">
+              <label>🔐 รหัสผ่าน</label>
+              <input type="password" id="password-input" placeholder="ใส่รหัสผ่าน..." maxlength="30">
+            </div>
+            <button id="login-btn" class="btn btn-primary btn-full">
+              <span>🚀 เข้าสู่ระบบ</span>
+            </button>
+          </div>
+          <p class="login-tip">💡 ครั้งแรก = สมัครอัตโนมัติ / กลับมาใช้ชื่อเดิม = ล็อกอิน</p>
+          <p class="login-error" id="login-error"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ LOBBY SCREEN ============ -->
+    <div id="lobby-screen" class="screen">
+      <!-- Top Navigation -->
+      <nav class="top-nav glass">
+        <div class="nav-left">
+          <span class="nav-logo">🎯 เกมทายเลข</span>
+        </div>
+        <div class="nav-center">
+          <span class="nav-status" id="online-count">👥 ออนไลน์: 0</span>
+        </div>
+        <div class="nav-right">
+          <span class="nav-user">👤 <span id="display-username"></span></span>
+          <button id="change-name-btn" class="btn btn-sm" title="เปลี่ยนชื่อ">✏️</button>
+        </div>
+      </nav>
+
+      <div class="lobby-content">
+        <!-- Left Column - Create Game & Active Games -->
+        <div class="lobby-main">
+          <!-- Create Game Card -->
+          <div class="card glass create-game-card">
+            <h2 class="card-title">🎮 สร้างเกมใหม่</h2>
+            <div class="form-group">
+              <label>เลือกโหมด <span class="badge limit-badge" id="mode-limit-badge">🎯 7 ครั้ง</span></label>
+              <div class="mode-selector">
+                <button class="mode-btn active" data-range="1-100" data-limit="7">
+                  <span class="mode-icon">🟢</span>
+                  <span class="mode-text">ง่าย</span>
+                  <span class="mode-range">1-100</span>
+                  <span class="mode-limit">7 ครั้ง</span>
+                </button>
+                <button class="mode-btn" data-range="1-200" data-limit="9">
+                  <span class="mode-icon">🟡</span>
+                  <span class="mode-text">ปานกลาง</span>
+                  <span class="mode-range">1-200</span>
+                  <span class="mode-limit">9 ครั้ง</span>
+                </button>
+                <button class="mode-btn" data-range="1-1000" data-limit="12">
+                  <span class="mode-icon">🔴</span>
+                  <span class="mode-text">ยาก</span>
+                  <span class="mode-range">1-1000</span>
+                  <span class="mode-limit">12 ครั้ง</span>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>ตั้งเลขที่ให้ทาย</label>
+              <div class="number-input-group">
+                <input type="number" id="set-number-input" placeholder="ใส่เลข..." min="1" max="100">
+                <button id="create-game-btn" class="btn btn-primary btn-lg">
+                  🚀 สร้างห้อง
+                </button>
+              </div>
+              <p class="form-hint" id="range-hint">🔢 ใส่เลขระหว่าง 1-100</p>
+            </div>
+          </div>
+
+          <!-- Active Games Card -->
+          <div class="card glass active-games-card">
+            <div class="card-header">
+              <h2 class="card-title">📋 ห้องที่กำลังเล่น</h2>
+              <button id="refresh-games-btn" class="btn btn-sm">🔄</button>
+            </div>
+            <div id="games-container">
+              <div class="empty-state">
+                <div class="empty-icon">🎲</div>
+                <p>ยังไม่มีห้องเกม</p>
+                <p class="empty-sub">สร้างห้องใหม่หรือรอสักครู่</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column - Leaderboard -->
+        <div class="lobby-sidebar">
+          <div class="card glass leaderboard-card">
+            <div class="card-header">
+              <h2 class="card-title">🏆 อันดับผู้ชนะ</h2>
+              <span class="badge">TOP 50</span>
+            </div>
+            <div id="leaderboard-container">
+              <div class="empty-state">
+                <div class="empty-icon">🏆</div>
+                <p>ยังไม่มีผู้ชนะ</p>
+                <p class="empty-sub">มาเป็นคนแรกเลย!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ GAME SCREEN ============ -->
+    <div id="game-screen" class="screen">
+      <!-- Game Top Bar -->
+      <nav class="top-nav glass game-top-nav">
+        <div class="nav-left">
+          <button id="leave-game-btn" class="btn btn-back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span>ออก</span>
+          </button>
+          <span class="nav-logo" id="game-room-code">🎯 ห้อง: <strong>----</strong></span>
+        </div>
+        <div class="nav-center">
+          <span class="badge badge-mode" id="game-mode-badge"></span>
+          <span class="badge badge-status" id="game-status-badge">⏳ รอผู้เล่น</span>
+        </div>
+        <div class="nav-right">
+          <span class="nav-user">👤 <span id="game-username-display"></span></span>
+        </div>
+      </nav>
+
+      <!-- Game Content -->
+      <div class="game-content">
+        <!-- Left: Game Board -->
+        <div class="game-board-col">
+          <!-- Game Info -->
+          <div class="card glass game-info-card">
+            <div class="game-info-grid">
+              <div class="info-item">
+                <span class="info-label">👑 ผู้ตั้งเลข</span>
+                <span class="info-value" id="game-creator">-</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">🎯 โหมด</span>
+                <span class="info-value" id="game-range">-</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">👥 ผู้เล่น</span>
+                <span class="info-value" id="game-player-count">0</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">🔢 ทายแล้ว</span>
+                <span class="info-value" id="game-guess-count">0</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">🎯 โอกาสคงเหลือ</span>
+                <span class="info-value" id="remaining-guesses">-/-</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guessing Area -->
+          <div class="card glass guessing-card" id="guessing-card">
+            <div class="guessing-header">
+              <h3>🔮 ทายเลข</h3>
+              <div id="creator-waiting-msg" class="waiting-msg" style="display:none">
+                ⏳ รอผู้เล่นมา JOIN...
+              </div>
+              <div id="guesses-remaining-badge" class="guesses-badge" style="display:none">
+                <span id="guesses-remaining-text">7</span>/<span id="guesses-max-text">7</span>
+              </div>
+            </div>
+            <div class="guess-input-group">
+              <input type="number" id="guess-input" placeholder="ใส่เลขที่ต้องการทาย..." min="1" max="100">
+              <button id="guess-btn" class="btn btn-primary btn-lg">
+                🎯 ทาย!
+              </button>
+            </div>
+            <div id="guess-feedback" class="guess-feedback" style="display:none">
+              <div class="feedback-content">
+                <span id="feedback-text"></span>
+              </div>
+            </div>
+            <div class="guess-progress" id="guess-progress-container" style="display:none">
+              <div class="guess-progress-bar">
+                <div class="guess-progress-fill" id="guess-progress-fill"></div>
+              </div>
+              <span class="guess-progress-text" id="guess-progress-text">ใช้ไป 0/7 ครั้ง</span>
+            </div>
+            <p class="form-hint" id="guess-hint">🔢 ใส่เลขระหว่าง <span id="guess-range-display">1-100</span></p>
+          </div>
+
+          <!-- Creator Controls (only visible to game creator) -->
+          <div class="card glass creator-card" id="creator-card" style="display:none">
+            <div class="creator-controls">
+              <div class="creator-info">
+                <span class="info-label">🔒 เลขที่คุณตั้ง:</span>
+                <span class="creator-number" id="creator-number-display">-</span>
+              </div>
+              <button id="start-game-btn" class="btn btn-success btn-lg">
+                🏁 เริ่มเกม
+              </button>
+              <button id="cancel-game-btn" class="btn btn-danger">
+                🗑️ ยกเลิกเกม
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Players & History -->
+        <div class="game-sidebar-col">
+          <!-- Players List -->
+          <div class="card glass players-card">
+            <h3 class="card-title">👥 ผู้เล่น <span id="player-count-badge" class="badge">0</span></h3>
+            <div id="players-list" class="players-list">
+              <div class="empty-state small">
+                <p>ไม่มีผู้เล่น</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guess History -->
+          <div class="card glass history-card">
+            <div class="card-header">
+              <h3 class="card-title">📜 ประวัติการทาย</h3>
+            </div>
+            <div id="history-container" class="history-container">
+              <div class="empty-state small">
+                <p>ยังไม่มีการทาย</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Winner Announcement Modal -->
+      <div id="winner-modal" class="modal-overlay" style="display:none">
+        <div class="modal-content glass">
+          <div class="winner-animation">
+            <span class="winner-icon">🏆</span>
+          </div>
+          <h2 class="winner-title">มีผู้ชนะ!</h2>
+          <p class="winner-name" id="winner-name">-</p>
+          <p class="winner-info" id="winner-info">ทายเลขถูกต้อง!</p>
+          <div class="winner-actions">
+            <button id="back-to-lobby-btn" class="btn btn-primary btn-lg">🔙 กลับไป lobby</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Toast -->
+      <div id="toast-container"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/script.js"></script>
+</body>
+</html>
