@@ -1,5 +1,7 @@
 app = "guess-number-game"
 
+[build]
+
 [[vm]]
   cpu_kind = "shared"
   cpus = 1
@@ -12,7 +14,3 @@ app = "guess-number-game"
   auto_start_machines = true
   min_machines_running = 1
   max_machines_running = 1
-
-[[statics]]
-  guest_path = "/app/public"
-  url_prefix = "/"
