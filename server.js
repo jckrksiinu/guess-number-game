@@ -25,23 +25,79 @@ app.use(express.static(__dirname + '/public'));
 let db;
 let configCollection;
 
-async function connectDB() {
-  try {
-    const client = new MongoClient(MONGO_URI);
-    await client.connect();
-    db = client.db('guessgame');
-    configCollection = db.collection('config');
-    console.log('✅ Connected to MongoDB');
-    
-    // Create index on config key
-    await configCollection.createIndex({ key: 1 }, { unique: true });
-  } catch (e) {
-    console.error('❌ MongoDB connection failed:', e.message);
-    console.log('⚠️ Running without persistence - data will be lost on restart');
-    db = null;
-    configCollection = null;
+let mongoClient;
+
+async function connectDB(retries = 5, delay = 3000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      mongoClient = new MongoClient(MONGO_URI);
+      await mongoClient.connect();
+      db = mongoClient.db('guessgame');
+      configCollection = db.collection('config');
+      console.log('✅ Connected to MongoDB');
+      
+      // Create index on config key
+      await configCollection.createIndex({ key: 1 }, { unique: true });
+      return true;
+    } catch (e) {
+      console.error(`❌ MongoDB connection attempt ${attempt}/${retries} failed:`, e.message);
+      if (attempt < retries) {
+        console.log(`⏳ Retrying in ${delay/1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        console.log('⚠️ All MongoDB connection attempts failed. Running without persistence.');
+        console.log('⚠️ Data will be lost on restart unless file fallback is used.');
+        db = null;
+        configCollection = null;
+        mongoClient = null;
+        return false;
+      }
+    }
   }
 }
+
+// Keep MongoDB connection alive
+setInterval(() => {
+  if (db) {
+    db.command({ ping: 1 }).catch(() => {
+      console.log('⚠️ MongoDB ping failed');
+    });
+  }
+}, 60000);
+
+// Retry loading data if MongoDB reconnects after initial failure
+async function tryReloadData() {
+  if (db && configCollection) {
+    const hadUsers = Object.keys(users).length > 0;
+    const hadLeaderboard = leaderboard.length > 0;
+    const hadRanks = Object.keys(ranksData).length > 0;
+    
+    await loadUsers();
+    await loadLeaderboard();
+    await loadRanks();
+    
+    const nowUsers = Object.keys(users).length;
+    const nowLeaderboard = leaderboard.length;
+    const nowRanks = Object.keys(ranksData).length;
+    
+    if (nowUsers > 0 || nowLeaderboard > 0 || nowRanks > 0) {
+      console.log(`🔄 Data reloaded: ${nowUsers} users, ${nowLeaderboard} leaderboard, ${nowRanks} ranks`);
+      // Broadcast updated data to all connected clients
+      broadcastLeaderboard();
+      io.emit('ranked_leaderboard', getRankedLeaderboard().slice(0, 50));
+    }
+  }
+}
+
+// Try reloading data every 10 seconds if it's empty and MongoDB is connected
+setInterval(async () => {
+  if (db && configCollection) {
+    const needsReload = Object.keys(users).length === 0 && leaderboard.length === 0;
+    if (needsReload) {
+      await tryReloadData();
+    }
+  }
+}, 10000);
 
 async function mongoGet(key) {
   if (!configCollection) return null;
@@ -1043,24 +1099,28 @@ io.on('connection', (socket) => {
   });
 
   // --- RANKED LEADERBOARD ---
+function getRankedLeaderboard() {
+  const rankedList = Object.entries(ranksData).map(([username, data]) => ({
+    username,
+    rank: data.rank,
+    stars: data.stars,
+    wins: data.wins || 0,
+    losses: data.losses || 0,
+    total: (data.wins || 0) + (data.losses || 0)
+  }));
+  
+  const rankOrder = { 'A': 6, 'B': 5, 'C': 4, 'D': 3, 'E': 2, 'F': 1 };
+  rankedList.sort((a, b) => {
+    const diff = (rankOrder[b.rank] || 0) - (rankOrder[a.rank] || 0);
+    if (diff !== 0) return diff;
+    return (b.stars || 0) - (a.stars || 0);
+  });
+  
+  return rankedList;
+}
+
   socket.on('get_ranked_leaderboard', () => {
-    const rankedList = Object.entries(ranksData).map(([username, data]) => ({
-      username,
-      rank: data.rank,
-      stars: data.stars,
-      wins: data.wins || 0,
-      losses: data.losses || 0,
-      total: (data.wins || 0) + (data.losses || 0)
-    }));
-    
-    const rankOrder = { 'A': 6, 'B': 5, 'C': 4, 'D': 3, 'E': 2, 'F': 1 };
-    rankedList.sort((a, b) => {
-      const diff = (rankOrder[b.rank] || 0) - (rankOrder[a.rank] || 0);
-      if (diff !== 0) return diff;
-      return (b.stars || 0) - (a.stars || 0);
-    });
-    
-    socket.emit('ranked_leaderboard', rankedList.slice(0, 50));
+    socket.emit('ranked_leaderboard', getRankedLeaderboard().slice(0, 50));
   });
 
   // --- DISCONNECT ---
@@ -1211,7 +1271,14 @@ async function startServer() {
     console.log('║     เปิดให้บริการที่:                  ║');
     console.log(`║     http://localhost:${PORT}              ║`);
     console.log('╚══════════════════════════════════════╝');
-    console.log(`👤 Users loaded: ${Object.keys(users).length}`);
+    console.log(`📊 Status:`);
+    console.log(`   MongoDB: ${db ? '✅ Connected' : '❌ Disconnected'}`);
+    console.log(`   👤 Users loaded: ${Object.keys(users).length}`);
+    console.log(`   🏆 Leaderboard entries: ${leaderboard.length}`);
+    console.log(`   👑 Rank records: ${Object.keys(ranksData).length}`);
+    if (leaderboard.length > 0) {
+      console.log(`   🥇 Top player: ${leaderboard[0].username} (${leaderboard[0].wins} wins)`);
+    }
   });
 }
 
