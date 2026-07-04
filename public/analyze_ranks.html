@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Rank Image Split Analyzer</title>
+<style>
+body { background: #1a1a2e; color: #eee; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+h1 { text-align: center; color: #e94560; }
+.rank-container { background: #16213e; border-radius: 12px; padding: 20px; margin: 20px 0; }
+.rank-container h2 { color: #ffd700; margin: 0 0 10px 0; }
+.original { max-width: 100%; border: 2px solid #555; border-radius: 8px; margin: 10px 0; }
+.split-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.split-grid img { width: 220px; border: 2px solid #0f3460; border-radius: 8px; background: #000; }
+.label { font-size: 12px; color: #aaa; text-align: center; margin-top: 4px; }
+.info { background: #0f3460; padding: 10px; border-radius: 8px; margin: 10px 0; font-family: monospace; font-size: 13px; }
+button { background: #e94560; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin: 5px; }
+button:hover { opacity: 0.8; }
+</style>
+</head>
+<body>
+<h1>🔍 Rank Image Split Analyzer</h1>
+<p>This tool shows how the rank images are being split. If a split looks wrong, let me know which image and what needs to change.</p>
+
+<div class="rank-container" id="f-rank">
+  <h2>F.png</h2>
+  <div class="info" id="f-info">Loading...</div>
+</div>
+
+<script>
+const basePath = '/images/ranks/';
+const filePath = 'file:///C:/Users/Hacker0.1/Downloads/Rank/';
+
+// For each rank, show the extracted crop regions
+(async function() {
+  const fInfo = document.getElementById('f-info');
+  fInfo.innerHTML = `
+    <p>Detected layout: 3 badges in a row</p>
+    <p>Columns: [57-444] (388px), [530-952] (423px), [1038-1478] (441px)</p>
+    <p>Row band: [255-687] (433px)</p>
+    <div class="split-grid">
+      <div><img src="${basePath}_F_crop1.png" onerror="this.src='${basePath}_F_quad1.png'"><div class="label">F crop 1</div></div>
+      <div><img src="${basePath}_F_crop2.png" onerror="this.src='${basePath}_F_quad2.png'"><div class="label">F crop 2</div></div>
+      <div><img src="${basePath}_F_crop3.png" onerror="this.src='${basePath}_F_quad3.png'"><div class="label">F crop 3</div></div>
+    </div>
+    <p>Are these the correct F1ดาว, F2ดาว, F3ดาว badges? Or should I use a different split?</p>
+  `;
+})();
+</script>
+</body>
+</html>
