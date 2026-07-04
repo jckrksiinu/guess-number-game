@@ -499,6 +499,11 @@ io.on('connection', (socket) => {
     broadcastGamesList();
   });
 
+  // --- GET GAMES (manual refresh) ---
+  socket.on('get_games', () => {
+    socket.emit('games_list', getActiveGamesList());
+  });
+
   // --- REJOIN / GET GAME STATE ---
   socket.on('get_game_state', ({ gameId }) => {
     const game = games[gameId];
@@ -591,6 +596,13 @@ function handlePlayerLeave(socketId, gameId) {
 
   broadcastGamesList();
 }
+
+// ========== PERIODIC BROADCAST ==========
+
+// Broadcast games list every 3 seconds to keep clients in sync
+setInterval(() => {
+  broadcastGamesList();
+}, 3000);
 
 // ========== START SERVER ==========
 
