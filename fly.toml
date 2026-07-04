@@ -7,6 +7,10 @@ app = "guess-number-game"
   cpus = 1
   memory_mb = 256
 
+[[mounts]]
+  source = "guess_data"
+  destination = "/app/data"
+
 [http_service]
   internal_port = 3000
   force_https = true
