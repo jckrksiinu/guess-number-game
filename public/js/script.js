@@ -1114,8 +1114,9 @@ function backToLobby() {
 const RANK_TIERS = ['F', 'E', 'D', 'C', 'B', 'A'];
 const RANK_NAMES = { F: 'บรอนซ์', E: 'เงิน', D: 'ทอง', C: 'แพลตตินัม', B: 'ไดมอนด์', A: 'มาสเตอร์' };
 
-function getRankImagePath(rank) {
-  return `images/ranks/${rank || 'F'}.png`;
+function getRankImagePath(rank, stars = 0) {
+  const s = Math.max(1, Math.min(4, stars || 1));
+  return `images/ranks/${rank || 'F'}${s}ดาว.png`;
 }
 
 function updateRankedLobbyDisplay(data) {
@@ -1124,7 +1125,7 @@ function updateRankedLobbyDisplay(data) {
   const stars = data.stars || 0;
   const starsText = '⭐'.repeat(stars) + '☆'.repeat(Math.max(0, 4 - stars));
   
-  dom.rankedLobbyBadgeImg.src = getRankImagePath(rank);
+  dom.rankedLobbyBadgeImg.src = getRankImagePath(rank, data.stars);
   dom.rankedLobbyRankLabel.textContent = `${RANK_NAMES[rank] || 'บรอนซ์'} (${rank})`;
   dom.rankedLobbyRankStars.textContent = starsText;
   
@@ -1163,10 +1164,12 @@ function enterRankedScreen(data) {
   
   // Rank images
   const myRank = data.myRank?.rank || 'F';
+  const myStars = data.myRank?.stars || 0;
   const oppRank = data.opponentRank?.rank || 'F';
-  dom.rankedMyRankImg.src = getRankImagePath(myRank);
+  const oppStars = data.opponentRank?.stars || 0;
+  dom.rankedMyRankImg.src = getRankImagePath(myRank, myStars);
   dom.rankedMyRankName.textContent = `${RANK_NAMES[myRank] || 'บรอนซ์'} (${myRank})`;
-  dom.rankedOpponentRankImg.src = getRankImagePath(oppRank);
+  dom.rankedOpponentRankImg.src = getRankImagePath(oppRank, oppStars);
   dom.rankedOpponentRankName.textContent = `${RANK_NAMES[oppRank] || 'บรอนซ์'} (${oppRank})`;
   
   // Show appropriate area
@@ -1251,14 +1254,16 @@ function updateRankedResultImages(data) {
   
   const myRank = myR?.rank || 'F';
   const oppRank = oppR?.rank || 'F';
-  const myStars = '⭐'.repeat(myR?.stars || 0) + '☆'.repeat(Math.max(0, 4 - (myR?.stars || 0)));
-  const oppStars = '⭐'.repeat(oppR?.stars || 0) + '☆'.repeat(Math.max(0, 4 - (oppR?.stars || 0)));
+  const myStarsCount = myR?.stars || 0;
+  const oppStarsCount = oppR?.stars || 0;
+  const myStars = '⭐'.repeat(myStarsCount) + '☆'.repeat(Math.max(0, 4 - myStarsCount));
+  const oppStars = '⭐'.repeat(oppStarsCount) + '☆'.repeat(Math.max(0, 4 - oppStarsCount));
   
-  dom.rankedResultMyImg.src = getRankImagePath(myRank);
+  dom.rankedResultMyImg.src = getRankImagePath(myRank, myStarsCount);
   dom.rankedResultMyRank.textContent = `${RANK_NAMES[myRank] || 'บรอนซ์'} (${myRank})`;
   dom.rankedResultMyStars.textContent = myStars;
   
-  dom.rankedResultOpponentImg.src = getRankImagePath(oppRank);
+  dom.rankedResultOpponentImg.src = getRankImagePath(oppRank, oppStarsCount);
   dom.rankedResultOpponentRank.textContent = `${RANK_NAMES[oppRank] || 'บรอนซ์'} (${oppRank})`;
   dom.rankedResultOpponentStars.textContent = oppStars;
 }
