@@ -76,15 +76,15 @@
                   <span class="gmode-text">โหมดปกติ</span>
                   <span class="gmode-desc">ทุกคนทายพร้อมกัน</span>
                 </button>
-                <button class="gmode-btn" data-mode="2player" data-desc="2 คนผลัดกันทาย">
+                <button class="gmode-btn" data-mode="2player" data-desc="2 คนผลัดกันทาย ระบบสุ่มเลขให้">
                   <span class="gmode-icon">⚔️</span>
                   <span class="gmode-text">2 ฝั่ง</span>
-                  <span class="gmode-desc">2 คนผลัดกันทาย</span>
+                  <span class="gmode-desc">2 คนผลัดกันทาย 🎲ระบบสุ่มเลข</span>
                 </button>
-                <button class="gmode-btn" data-mode="3player" data-desc="3 คนผลัดกันทาย">
+                <button class="gmode-btn" data-mode="3player" data-desc="3 คนผลัดกันทาย ระบบสุ่มเลขให้">
                   <span class="gmode-icon">🔁</span>
                   <span class="gmode-text">3 ฝั่ง</span>
-                  <span class="gmode-desc">3 คนผลัดกันทาย</span>
+                  <span class="gmode-desc">3 คนผลัดกันทาย 🎲ระบบสุ่มเลข</span>
                 </button>
               </div>
               <p class="form-hint" id="gmode-hint">📋 ทุกคนทายได้ทันที ไม่ต้องรอคิว</p>
@@ -113,7 +113,7 @@
                 </button>
               </div>
             </div>
-            <div class="form-group">
+            <div class="form-group" id="number-input-group">
               <label>ตั้งเลขที่ให้ทาย</label>
               <div class="number-input-group">
                 <input type="number" id="set-number-input" placeholder="ใส่เลข..." min="1" max="100">
@@ -122,6 +122,12 @@
                 </button>
               </div>
               <p class="form-hint" id="range-hint">🔢 ใส่เลขระหว่าง 1-100</p>
+            </div>
+            <div class="form-group" id="auto-number-msg" style="display:none">
+              <div class="auto-number-card">
+                <span class="auto-number-icon">🎲</span>
+                <span class="auto-number-text">ระบบสุ่มเลขให้อัตโนมัติเมื่อเริ่มเกม</span>
+              </div>
             </div>
           </div>
 

@@ -47,6 +47,8 @@ const dom = {
   gmodeHint: $('gmode-hint'),
   turnIndicator: $('turn-indicator'),
   turnPlayerName: $('turn-player-name'),
+  numberInputGroup: $('number-input-group'),
+  autoNumberMsg: $('auto-number-msg'),
   gamesContainer: $('games-container'),
   leaderboardContainer: $('leaderboard-container'),
   refreshGamesBtn: $('refresh-games-btn'),
@@ -167,7 +169,6 @@ function initSocket() {
     state.currentRange = data.range;
     state.gameMode = data.mode || 'free';
     state.maxGuesses = data.maxGuesses || 7;
-    state.remainingGuesses = 0; // creator can't guess
     state.currentTurnPlayer = null;
     const [min, max] = data.range.split('-').map(Number);
     state.currentMin = min;
@@ -175,18 +176,30 @@ function initSocket() {
 
     enterGameScreen(data);
     
-    dom.creatorCard.style.display = 'block';
-    dom.creatorNumberDisplay.textContent = data.number;
-    dom.creatorWaitingMsg.style.display = 'block';
-    dom.startGameBtn.style.display = 'none';
-
-    // Hide turn indicator for creator (they don't guess)
-    dom.turnIndicator.style.display = 'none';
-
-    dom.guessingCard.style.opacity = '0.5';
-    dom.guessInput.disabled = true;
-    dom.guessBtn.disabled = true;
-    updateRemainingGuessesUI(0, data.maxGuesses);
+    if (state.gameMode === 'free') {
+      // Free mode: creator sets the number, can't guess
+      state.remainingGuesses = 0;
+      dom.creatorCard.style.display = 'block';
+      dom.creatorNumberDisplay.textContent = data.number;
+      dom.creatorWaitingMsg.style.display = 'block';
+      dom.startGameBtn.style.display = 'none';
+      dom.guessingCard.style.opacity = '0.5';
+      dom.guessInput.disabled = true;
+      dom.guessBtn.disabled = true;
+      updateRemainingGuessesUI(0, data.maxGuesses);
+      dom.turnIndicator.style.display = 'none';
+    } else {
+      // Turn-based mode: creator is also a guesser
+      state.remainingGuesses = state.maxGuesses;
+      dom.creatorCard.style.display = 'none';
+      dom.turnIndicator.style.display = 'flex';
+      dom.turnPlayerName.textContent = data.players[0] || data.creator;
+      dom.guessingCard.style.opacity = '0.6';
+      dom.guessInput.disabled = true;
+      dom.guessBtn.disabled = true;
+      updateRemainingGuessesUI(state.maxGuesses, state.maxGuesses);
+      showToast('🎲 ระบบจะสุ่มเลขให้เมื่อเริ่มเกม!', 'info');
+    }
 
     showToast(`✅ สร้างห้อง ${data.gameId} สำเร็จ! รอผู้เล่นร่วม...`, 'success');
   });
@@ -253,20 +266,30 @@ function initSocket() {
     state.currentRange = data.range;
     state.gameMode = data.mode || 'free';
     state.maxGuesses = data.maxGuesses || 7;
-    state.remainingGuesses = data.remainingGuesses !== undefined ? data.remainingGuesses : (data.isCreator ? 0 : state.maxGuesses);
     state.currentTurnPlayer = data.currentPlayer || null;
     const [min, max] = data.range.split('-').map(Number);
     state.currentMin = min;
     state.currentMax = max;
 
+    // In turn-based mode, creator can also guess
+    if (state.gameMode !== 'free') {
+      state.remainingGuesses = data.remainingGuesses !== undefined ? data.remainingGuesses : state.maxGuesses;
+    } else {
+      state.remainingGuesses = data.remainingGuesses !== undefined ? data.remainingGuesses : (data.isCreator ? 0 : state.maxGuesses);
+    }
+
     enterGameScreen(data);
 
-    if (data.isCreator) {
+    if (state.gameMode === 'free' && data.isCreator) {
+      // Free mode creator: show creator card
       dom.creatorCard.style.display = 'block';
       if (data.number) dom.creatorNumberDisplay.textContent = data.number;
       updateRemainingGuessesUI(0, data.maxGuesses);
       dom.turnIndicator.style.display = 'none';
+      dom.guessInput.disabled = true;
+      dom.guessBtn.disabled = true;
     } else {
+      // Guesser (or turn-based mode where everyone guesses)
       dom.creatorCard.style.display = 'none';
       updateRemainingGuessesUI(state.remainingGuesses, state.maxGuesses);
       
@@ -274,11 +297,12 @@ function initSocket() {
         dom.turnIndicator.style.display = 'flex';
         dom.turnPlayerName.textContent = data.currentPlayer;
         const isMyTurn = data.currentPlayer === state.username;
-        if (!isMyTurn || state.remainingGuesses <= 0) {
-          dom.guessingCard.style.opacity = '0.6';
-          dom.guessInput.disabled = true;
-          dom.guessBtn.disabled = true;
-        } else {
+        dom.guessingCard.style.opacity = (isMyTurn && state.remainingGuesses > 0) ? '1' : '0.6';
+        dom.guessInput.disabled = !isMyTurn || state.remainingGuesses <= 0;
+        dom.guessBtn.disabled = !isMyTurn || state.remainingGuesses <= 0;
+      } else if (state.gameMode === 'free') {
+        dom.turnIndicator.style.display = 'none';
+        if (data.status === 'playing' && state.remainingGuesses > 0) {
           dom.guessingCard.style.opacity = '1';
           dom.guessInput.disabled = false;
           dom.guessBtn.disabled = false;
@@ -300,7 +324,7 @@ function initSocket() {
     dom.gamePlayerCount.textContent = data.players.length;
     dom.playerCountBadge.textContent = data.players.length;
     
-    if (state.isCreator && data.players.length >= 2) {
+    if (state.isCreator && state.gameMode === 'free' && data.players.length >= 2) {
       dom.startGameBtn.style.display = 'inline-flex';
       dom.creatorWaitingMsg.style.display = 'none';
     }
@@ -324,10 +348,15 @@ function initSocket() {
   socket.on('creator_changed', (data) => {
     if (data.newCreator === state.username) {
       state.isCreator = true;
-      dom.creatorCard.style.display = 'block';
-      dom.creatorNumberDisplay.textContent = '???';
-      updateRemainingGuessesUI(0, state.maxGuesses);
-      showToast('👑 คุณเป็นผู้ตั้งเลขคนใหม่แล้ว!', 'info');
+      if (state.gameMode === 'free') {
+        dom.creatorCard.style.display = 'block';
+        dom.creatorNumberDisplay.textContent = '???';
+        updateRemainingGuessesUI(0, state.maxGuesses);
+        showToast('👑 คุณเป็นผู้ตั้งเลขคนใหม่แล้ว!', 'info');
+      } else {
+        dom.creatorCard.style.display = 'none';
+        showToast('👑 คุณเป็นเจ้าของห้องคนใหม่', 'info');
+      }
     }
     dom.gameCreator.textContent = data.newCreator;
   });
@@ -339,7 +368,7 @@ function initSocket() {
       dom.gameStatusBadge.textContent = '🎯 กำลังเล่น';
       dom.gameStatusBadge.className = 'badge badge-status playing';
       
-      if (state.isCreator) {
+      if (state.isCreator && state.gameMode === 'free') {
         dom.creatorWaitingMsg.style.display = 'none';
         dom.startGameBtn.style.display = 'none';
         dom.guessInput.disabled = true;
@@ -551,6 +580,17 @@ dom.gmodeBtns.forEach(btn => {
     state.gameMode = btn.dataset.mode;
     const hint = btn.dataset.desc || 'ทุกคนทายได้ทันที';
     dom.gmodeHint.textContent = `📋 ${hint}`;
+    
+    // For turn-based modes, hide number input (server generates number)
+    if (state.gameMode === '2player' || state.gameMode === '3player') {
+      dom.numberInputGroup.style.display = 'none';
+      dom.autoNumberMsg.style.display = 'block';
+      dom.rangeHint.textContent = '🎲 ระบบจะสุ่มเลขให้เมื่อเริ่มเกม';
+    } else {
+      dom.numberInputGroup.style.display = 'block';
+      dom.autoNumberMsg.style.display = 'none';
+      updateRangeHint();
+    }
   });
 });
 
@@ -576,6 +616,17 @@ dom.createGameBtn.addEventListener('click', () => {
     return;
   }
   
+  // For turn-based modes, number is auto-generated by server
+  if (state.gameMode === '2player' || state.gameMode === '3player') {
+    socket.emit('create_game', {
+      username: state.username,
+      range: state.currentRange,
+      mode: state.gameMode
+    });
+    return;
+  }
+  
+  // Free mode: need to provide a number
   const number = parseInt(dom.setNumberInput.value);
   if (!number || number < state.currentMin || number > state.currentMax) {
     showToast(`กรุณาใส่เลขระหว่าง ${state.currentMin}-${state.currentMax}`, 'error');
@@ -1017,6 +1068,13 @@ const activeGMode = document.querySelector('.gmode-btn.active');
 if (activeGMode) {
   dom.gmodeHint.textContent = `📋 ${activeGMode.dataset.desc || 'ทุกคนทายได้ทันที'}`;
   state.gameMode = activeGMode.dataset.mode || 'free';
+}
+
+// Show/hide number input based on initial mode
+if (state.gameMode === '2player' || state.gameMode === '3player') {
+  dom.numberInputGroup.style.display = 'none';
+  dom.autoNumberMsg.style.display = 'block';
+  dom.rangeHint.textContent = '🎲 ระบบจะสุ่มเลขให้เมื่อเริ่มเกม';
 }
 
 console.log('🎯 เกมทายเลขพร้อมเล่น!');
