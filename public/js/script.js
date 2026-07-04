@@ -109,8 +109,6 @@ const dom = {
   toastContainer: $('toast-container'),
   
   // Ranked
-  rankedNavBtn: $('ranked-nav-btn'),
-  joinRankedBtn: $('join-ranked-btn'),
   rankedQueueOverlay: $('ranked-queue-overlay'),
   rankedQueueCount: $('ranked-queue-count'),
   cancelRankedQueueBtn: $('cancel-ranked-queue-btn'),
@@ -169,6 +167,7 @@ const dom = {
   rankedLobbyWinrate: $('ranked-lobby-winrate'),
   rankedLobbyOnline: $('ranked-lobby-online'),
   rankedLeaderboardContainer: $('ranked-leaderboard-container')
+};
 
 // ========== SOCKET ==========
 let socket;
