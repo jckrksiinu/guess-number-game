@@ -154,6 +154,7 @@ function getActiveGamesList() {
       id: g.id,
       creator: g.creator,
       range: g.range,
+      mode: g.mode,
       modeName: g.modeName,
       playerCount: g.players.length,
       maxPlayers: g.maxPlayers,
@@ -228,7 +229,7 @@ io.on('connection', (socket) => {
   });
 
   // --- CREATE GAME ---
-  socket.on('create_game', ({ username, range, number }) => {
+  socket.on('create_game', ({ username, range, number, mode = 'free' }) => {
     const cleanName = (username || '').trim().slice(0, 20);
     const num = parseInt(number);
     const [min, max] = range.split('-').map(Number);
@@ -246,11 +247,15 @@ io.on('connection', (socket) => {
     const gameId = generateGameId();
     const modeNames = { '1-100': 'ง่าย (1-100)', '1-200': 'ปานกลาง (1-200)', '1-1000': 'ยาก (1-1000)' };
     
+    // Max players based on mode
+    const maxPlayers = mode === '2player' ? 3 : mode === '3player' ? 4 : 10;
+    
     const game = {
       id: gameId,
       creator: cleanName,
       number: num,
       range: range,
+      mode: mode, // 'free', '2player', '3player'
       modeName: modeNames[range] || range,
       min: min,
       max: max,
@@ -258,8 +263,9 @@ io.on('connection', (socket) => {
       guesses: [],
       status: 'waiting',
       winner: null,
-      maxPlayers: 10,
+      maxPlayers: maxPlayers,
       maxGuesses: maxGuesses,
+      turnIndex: -1, // -1 = not started, 0+ = current player index
       createdAt: Date.now()
     };
     
@@ -278,11 +284,13 @@ io.on('connection', (socket) => {
       gameId: game.id,
       creator: game.creator,
       range: game.range,
+      mode: game.mode,
       modeName: game.modeName,
       players: game.players.map(p => p.username),
       status: game.status,
       number: game.number,
-      maxGuesses: game.maxGuesses
+      maxGuesses: game.maxGuesses,
+      maxPlayers: game.maxPlayers
     });
 
     broadcastGamesList();
@@ -331,6 +339,7 @@ io.on('connection', (socket) => {
       gameId: game.id,
       creator: game.creator,
       range: game.range,
+      mode: game.mode,
       modeName: game.modeName,
       players: game.players.map(p => p.username),
       status: game.status,
@@ -338,7 +347,10 @@ io.on('connection', (socket) => {
       winner: game.winner,
       isCreator: false,
       maxGuesses: game.maxGuesses,
-      remainingGuesses: getPlayerRemainingGuesses(game, cleanName)
+      maxPlayers: game.maxPlayers,
+      remainingGuesses: getPlayerRemainingGuesses(game, cleanName),
+      turnIndex: game.turnIndex,
+      currentPlayer: game.turnIndex >= 0 ? game.players[game.turnIndex].username : null
     });
 
     // Notify other players
@@ -347,12 +359,26 @@ io.on('connection', (socket) => {
       players: game.players.map(p => p.username)
     });
 
-    // Auto-start if enough players
-    if (game.players.length >= 2 && game.status === 'waiting') {
+    // Auto-start if enough players (respect turn-based modes)
+    let minPlayers = 2;
+    if (game.mode === '2player') minPlayers = 3;  // creator + 2 guessers
+    else if (game.mode === '3player') minPlayers = 4; // creator + 3 guessers
+    
+    if (game.players.length >= minPlayers && game.status === 'waiting') {
       game.status = 'playing';
       io.to(gameId).emit('game_status_change', { status: 'playing' });
+      
+      // Initialize turn for turn-based modes
+      if (game.mode !== 'free') {
+        game.turnIndex = game.players.findIndex(p => p.username !== game.creator);
+        if (game.turnIndex === -1) game.turnIndex = 0;
+        io.to(gameId).emit('turn_change', {
+          currentPlayer: game.players[game.turnIndex].username
+        });
+      }
+      
       io.to(gameId).emit('game_message', {
-        message: '🎯 เกมเริ่มแล้ว! มีผู้เล่นครบ 2 คนแล้ว!'
+        message: '🎯 เกมเริ่มแล้ว! มีผู้เล่นครบแล้ว!'
       });
     }
 
@@ -379,6 +405,15 @@ io.on('connection', (socket) => {
     if (!game.players.some(p => p.username === username)) {
       socket.emit('error', { message: 'คุณไม่ได้อยู่ในเกมนี้' });
       return;
+    }
+
+    // --- CHECK TURN (turn-based modes) ---
+    if (game.mode !== 'free') {
+      const currentPlayer = game.players[game.turnIndex];
+      if (!currentPlayer || currentPlayer.username !== username) {
+        socket.emit('error', { message: `⏳ ยังไม่ใช่ตาคุณ! ตาของ ${currentPlayer ? currentPlayer.username : 'ผู้เล่นอื่น'}` });
+        return;
+      }
     }
 
     // --- CHECK GUESS LIMIT ---
@@ -468,6 +503,17 @@ io.on('connection', (socket) => {
       });
     }
 
+    // Advance turn for turn-based modes (only if not finished)
+    if (game.mode !== 'free' && result !== 'correct') {
+      game.turnIndex = getNextTurnIndex(game);
+      io.to(gameId).emit('turn_change', {
+        currentPlayer: game.players[game.turnIndex].username
+      });
+      io.to(gameId).emit('game_message', {
+        message: `🔄 ตาของ ${game.players[game.turnIndex].username} แล้ว!`
+      });
+    }
+
     console.log(`🔢 ${username} guessed ${guessNum} in ${gameId}: ${result} (เหลือ ${newRemaining}/${maxGuesses})`);
   });
 
@@ -482,8 +528,11 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: 'เฉพาะคนสร้างเกมเท่านั้นที่เริ่มเกมได้' });
       return;
     }
-    if (game.players.length < 2) {
-      socket.emit('error', { message: 'ต้องมีผู้เล่นอย่างน้อย 2 คน' });
+    let minPlayers = 2;
+    if (game.mode === '2player') minPlayers = 3;
+    else if (game.mode === '3player') minPlayers = 4;
+    if (game.players.length < minPlayers) {
+      socket.emit('error', { message: `ต้องมีผู้เล่นอย่างน้อย ${minPlayers} คน (รวมคุณ)` });
       return;
     }
     if (game.status === 'playing') {
@@ -496,6 +545,16 @@ io.on('connection', (socket) => {
     io.to(gameId).emit('game_message', {
       message: '🎯 เกมเริ่มแล้ว! มาเริ่มทายเลขกันเลย!'
     });
+
+    // Initialize turn for turn-based modes
+    if (game.mode !== 'free') {
+      game.turnIndex = game.players.findIndex(p => p.username !== game.creator);
+      if (game.turnIndex === -1) game.turnIndex = 0;
+      io.to(gameId).emit('turn_change', {
+        currentPlayer: game.players[game.turnIndex].username
+      });
+    }
+
     broadcastGamesList();
   });
 
@@ -519,6 +578,7 @@ io.on('connection', (socket) => {
       gameId: game.id,
       creator: game.creator,
       range: game.range,
+      mode: game.mode,
       modeName: game.modeName,
       players: game.players.map(p => p.username),
       status: game.status,
@@ -527,7 +587,10 @@ io.on('connection', (socket) => {
       number: username === game.creator ? game.number : undefined,
       isCreator: username === game.creator,
       maxGuesses: game.maxGuesses,
-      remainingGuesses: username ? getPlayerRemainingGuesses(game, username) : 0
+      maxPlayers: game.maxPlayers,
+      remainingGuesses: username ? getPlayerRemainingGuesses(game, username) : 0,
+      turnIndex: game.turnIndex,
+      currentPlayer: game.turnIndex >= 0 ? game.players[game.turnIndex].username : null
     });
   });
 
@@ -548,14 +611,38 @@ io.on('connection', (socket) => {
   });
 });
 
+function getNextTurnIndex(game) {
+  if (game.mode === 'free') return -1;
+  let next = game.turnIndex;
+  let attempts = 0;
+  do {
+    next = (next + 1) % game.players.length;
+    attempts++;
+    if (attempts > game.players.length * 2) break;
+  } while (game.players[next].username === game.creator);
+  return next;
+}
+
 function handlePlayerLeave(socketId, gameId) {
   const game = games[gameId];
   if (!game) return;
 
-  const player = game.players.find(p => p.id === socketId);
-  if (!player) return;
+  const playerIndex = game.players.findIndex(p => p.id === socketId);
+  if (playerIndex === -1) return;
+  const player = game.players[playerIndex];
+  const wasCurrentTurn = game.turnIndex >= 0 && playerIndex === game.turnIndex;
 
-  game.players = game.players.filter(p => p.id !== socketId);
+  // Remove the player
+  game.players.splice(playerIndex, 1);
+  
+  // Adjust turnIndex after removal
+  if (game.turnIndex >= 0) {
+    if (playerIndex < game.turnIndex) {
+      game.turnIndex--;
+    } else if (game.turnIndex >= game.players.length) {
+      game.turnIndex = Math.max(0, game.players.length - 1);
+    }
+  }
 
   if (playerSockets[socketId]) {
     playerSockets[socketId].gameId = null;
@@ -564,6 +651,16 @@ function handlePlayerLeave(socketId, gameId) {
   if (game.creator === player.username) {
     if (game.players.length > 0) {
       game.creator = game.players[0].username;
+      
+      // If new creator was the current turn holder, advance turn
+      if (game.mode !== 'free' && game.status === 'playing' && game.turnIndex >= 0 &&
+          game.players[game.turnIndex]?.username === game.creator) {
+        game.turnIndex = getNextTurnIndex(game);
+        io.to(gameId).emit('turn_change', {
+          currentPlayer: game.players[game.turnIndex].username
+        });
+      }
+      
       io.to(gameId).emit('creator_changed', { newCreator: game.creator });
       io.to(gameId).emit('game_message', {
         message: `👑 ${game.creator} ได้รับตำแหน่งผู้ตั้งเลขคนใหม่`
@@ -586,8 +683,32 @@ function handlePlayerLeave(socketId, gameId) {
     players: game.players.map(p => p.username)
   });
 
+  // Handle turn-based mode
+  if (game.mode !== 'free' && game.status === 'playing') {
+    const nonCreatorPlayers = game.players.filter(p => p.username !== game.creator);
+    if (nonCreatorPlayers.length === 0) {
+      // No more guessers, pause game
+      game.status = 'waiting';
+      game.turnIndex = -1;
+      io.to(gameId).emit('game_status_change', { status: 'waiting' });
+      io.to(gameId).emit('game_message', {
+        message: '⏸️ ไม่มีผู้ทายเหลือแล้ว รอผู้เล่นเพิ่ม...'
+      });
+    } else if (wasCurrentTurn) {
+      // Current turn player left, advance to next
+      game.turnIndex = getNextTurnIndex(game);
+      io.to(gameId).emit('turn_change', {
+        currentPlayer: game.players[game.turnIndex].username
+      });
+      io.to(gameId).emit('game_message', {
+        message: `🔄 ${player.username} ออกไป ตาของ ${game.players[game.turnIndex].username} แล้ว!`
+      });
+    }
+  }
+
   if (game.status === 'playing' && game.players.length === 1 && game.players[0].username === game.creator) {
     game.status = 'waiting';
+    game.turnIndex = -1;
     io.to(gameId).emit('game_status_change', { status: 'waiting' });
     io.to(gameId).emit('game_message', {
       message: '⏸️ รอผู้เล่นเพิ่ม...'

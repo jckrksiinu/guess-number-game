@@ -14,7 +14,9 @@ const state = {
   gameStatus: null,
   connected: false,
   maxGuesses: 7,
-  remainingGuesses: 7
+  remainingGuesses: 7,
+  gameMode: 'free',       // 'free', '2player', '3player'
+  currentTurnPlayer: null // username of current turn holder
 };
 
 // ========== DOM REFS ==========
@@ -41,6 +43,10 @@ const dom = {
   createGameBtn: $('create-game-btn'),
   rangeHint: $('range-hint'),
   modeLimitBadge: $('mode-limit-badge'),
+  gmodeBtns: $$('.gmode-btn'),
+  gmodeHint: $('gmode-hint'),
+  turnIndicator: $('turn-indicator'),
+  turnPlayerName: $('turn-player-name'),
   gamesContainer: $('games-container'),
   leaderboardContainer: $('leaderboard-container'),
   refreshGamesBtn: $('refresh-games-btn'),
@@ -159,8 +165,10 @@ function initSocket() {
     state.currentGameId = data.gameId;
     state.isCreator = true;
     state.currentRange = data.range;
+    state.gameMode = data.mode || 'free';
     state.maxGuesses = data.maxGuesses || 7;
     state.remainingGuesses = 0; // creator can't guess
+    state.currentTurnPlayer = null;
     const [min, max] = data.range.split('-').map(Number);
     state.currentMin = min;
     state.currentMax = max;
@@ -171,6 +179,10 @@ function initSocket() {
     dom.creatorNumberDisplay.textContent = data.number;
     dom.creatorWaitingMsg.style.display = 'block';
     dom.startGameBtn.style.display = 'none';
+
+    // Hide turn indicator for creator (they don't guess)
+    dom.turnIndicator.style.display = 'none';
+
     dom.guessingCard.style.opacity = '0.5';
     dom.guessInput.disabled = true;
     dom.guessBtn.disabled = true;
@@ -184,8 +196,10 @@ function initSocket() {
     state.currentGameId = data.gameId;
     state.isCreator = false;
     state.currentRange = data.range;
+    state.gameMode = data.mode || 'free';
     state.maxGuesses = data.maxGuesses || 7;
     state.remainingGuesses = data.remainingGuesses !== undefined ? data.remainingGuesses : state.maxGuesses;
+    state.currentTurnPlayer = data.currentPlayer || null;
     const [min, max] = data.range.split('-').map(Number);
     state.currentMin = min;
     state.currentMax = max;
@@ -193,16 +207,33 @@ function initSocket() {
     enterGameScreen(data);
     
     dom.creatorCard.style.display = 'none';
-    
-    // Enable/disable based on game status
-    if (data.status === 'playing' && state.remainingGuesses > 0) {
-      dom.guessingCard.style.opacity = '1';
-      dom.guessInput.disabled = false;
-      dom.guessBtn.disabled = false;
+
+    // Show turn indicator for turn-based modes
+    if (state.gameMode !== 'free' && data.currentPlayer) {
+      dom.turnIndicator.style.display = 'flex';
+      dom.turnPlayerName.textContent = data.currentPlayer;
+      const isMyTurn = data.currentPlayer === state.username;
+      if (!isMyTurn || state.remainingGuesses <= 0) {
+        dom.guessingCard.style.opacity = '0.6';
+        dom.guessInput.disabled = true;
+        dom.guessBtn.disabled = true;
+      } else {
+        dom.guessingCard.style.opacity = '1';
+        dom.guessInput.disabled = false;
+        dom.guessBtn.disabled = false;
+      }
     } else {
-      dom.guessingCard.style.opacity = '0.5';
-      dom.guessInput.disabled = true;
-      dom.guessBtn.disabled = true;
+      dom.turnIndicator.style.display = 'none';
+      // Enable/disable based on game status (free mode)
+      if (data.status === 'playing' && state.remainingGuesses > 0) {
+        dom.guessingCard.style.opacity = '1';
+        dom.guessInput.disabled = false;
+        dom.guessBtn.disabled = false;
+      } else {
+        dom.guessingCard.style.opacity = '0.5';
+        dom.guessInput.disabled = true;
+        dom.guessBtn.disabled = true;
+      }
     }
 
     updateRemainingGuessesUI(state.remainingGuesses, state.maxGuesses);
@@ -220,8 +251,10 @@ function initSocket() {
     state.currentGameId = data.gameId;
     state.isCreator = data.isCreator || false;
     state.currentRange = data.range;
+    state.gameMode = data.mode || 'free';
     state.maxGuesses = data.maxGuesses || 7;
     state.remainingGuesses = data.remainingGuesses !== undefined ? data.remainingGuesses : (data.isCreator ? 0 : state.maxGuesses);
+    state.currentTurnPlayer = data.currentPlayer || null;
     const [min, max] = data.range.split('-').map(Number);
     state.currentMin = min;
     state.currentMax = max;
@@ -232,9 +265,27 @@ function initSocket() {
       dom.creatorCard.style.display = 'block';
       if (data.number) dom.creatorNumberDisplay.textContent = data.number;
       updateRemainingGuessesUI(0, data.maxGuesses);
+      dom.turnIndicator.style.display = 'none';
     } else {
       dom.creatorCard.style.display = 'none';
       updateRemainingGuessesUI(state.remainingGuesses, state.maxGuesses);
+      
+      if (state.gameMode !== 'free' && data.currentPlayer) {
+        dom.turnIndicator.style.display = 'flex';
+        dom.turnPlayerName.textContent = data.currentPlayer;
+        const isMyTurn = data.currentPlayer === state.username;
+        if (!isMyTurn || state.remainingGuesses <= 0) {
+          dom.guessingCard.style.opacity = '0.6';
+          dom.guessInput.disabled = true;
+          dom.guessBtn.disabled = true;
+        } else {
+          dom.guessingCard.style.opacity = '1';
+          dom.guessInput.disabled = false;
+          dom.guessBtn.disabled = false;
+        }
+      } else {
+        dom.turnIndicator.style.display = 'none';
+      }
     }
 
     if (data.guesses && data.guesses.length > 0) {
@@ -287,18 +338,26 @@ function initSocket() {
     if (data.status === 'playing') {
       dom.gameStatusBadge.textContent = '🎯 กำลังเล่น';
       dom.gameStatusBadge.className = 'badge badge-status playing';
-      dom.guessingCard.style.opacity = '1';
       
       if (state.isCreator) {
         dom.creatorWaitingMsg.style.display = 'none';
         dom.startGameBtn.style.display = 'none';
         dom.guessInput.disabled = true;
         dom.guessBtn.disabled = true;
+      } else if (state.gameMode !== 'free' && state.currentTurnPlayer) {
+        // Turn-based: wait for turn_change event to enable input
+        const isMyTurn = state.currentTurnPlayer === state.username;
+        dom.guessingCard.style.opacity = isMyTurn ? '1' : '0.6';
+        dom.guessInput.disabled = !isMyTurn;
+        dom.guessBtn.disabled = !isMyTurn;
+        if (isMyTurn) dom.guessInput.focus();
       } else if (state.remainingGuesses > 0) {
+        dom.guessingCard.style.opacity = '1';
         dom.guessInput.disabled = false;
         dom.guessBtn.disabled = false;
         dom.guessInput.focus();
       } else {
+        dom.guessingCard.style.opacity = '0.5';
         dom.guessInput.disabled = true;
         dom.guessBtn.disabled = true;
       }
@@ -335,12 +394,44 @@ function initSocket() {
     showToast(data.message, 'info');
   });
 
+  // --- Turn Change (turn-based modes) ---
+  socket.on('turn_change', (data) => {
+    state.currentTurnPlayer = data.currentPlayer;
+    dom.turnIndicator.style.display = 'flex';
+    dom.turnPlayerName.textContent = data.currentPlayer;
+
+    // Highlight the current player in players list
+    $$('.player-item').forEach(el => {
+      el.classList.remove('is-turn');
+      const nameEl = el.querySelector('.player-name');
+      if (nameEl && nameEl.textContent.trim().startsWith(data.currentPlayer)) {
+        el.classList.add('is-turn');
+      }
+    });
+
+    // Enable/disable guess based on turn
+    if (state.gameMode !== 'free') {
+      const isMyTurn = data.currentPlayer === state.username;
+      if (isMyTurn && state.remainingGuesses > 0 && state.gameStatus === 'playing') {
+        dom.guessingCard.style.opacity = '1';
+        dom.guessInput.disabled = false;
+        dom.guessBtn.disabled = false;
+        dom.guessInput.focus();
+      } else if (!isMyTurn) {
+        dom.guessInput.disabled = true;
+        dom.guessBtn.disabled = true;
+        dom.guessingCard.style.opacity = '0.6';
+      }
+    }
+  });
+
   // --- Game Won ---
   socket.on('game_won', (data) => {
     dom.gameStatusBadge.textContent = '🏁 จบเกม';
     dom.gameStatusBadge.className = 'badge badge-status finished';
     dom.guessInput.disabled = true;
     dom.guessBtn.disabled = true;
+    dom.turnIndicator.style.display = 'none';
 
     dom.winnerName.textContent = data.winner;
     dom.winnerInfo.textContent = `🎯 ทายเลข ${data.number} ถูกต้อง!`;
@@ -452,6 +543,17 @@ dom.modeBtns.forEach(btn => {
   });
 });
 
+// Gameplay Mode Selection
+dom.gmodeBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    dom.gmodeBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.gameMode = btn.dataset.mode;
+    const hint = btn.dataset.desc || 'ทุกคนทายได้ทันที';
+    dom.gmodeHint.textContent = `📋 ${hint}`;
+  });
+});
+
 function updateRangeHint() {
   dom.rangeHint.textContent = `🔢 ใส่เลขระหว่าง ${state.currentMin}-${state.currentMax}`;
   dom.guessRangeDisplay.textContent = `${state.currentMin}-${state.currentMax}`;
@@ -484,7 +586,8 @@ dom.createGameBtn.addEventListener('click', () => {
   socket.emit('create_game', {
     username: state.username,
     range: state.currentRange,
-    number: number
+    number: number,
+    mode: state.gameMode
   });
 });
 
@@ -543,11 +646,18 @@ function enterGameScreen(data) {
   showScreen('game-screen');
   
   const [min, max] = (data.range || state.currentRange).split('-').map(Number);
+  const mode = data.mode || state.gameMode || 'free';
   
   dom.gameRoomCode.innerHTML = `🎯 ห้อง: <strong>${data.gameId || state.currentGameId}</strong>`;
-  dom.gameModeBadge.textContent = data.modeName || `${min}-${max}`;
+  
+  // Show mode in the nav badge
+  let modeBadgeText = data.modeName || `${min}-${max}`;
+  if (mode === '2player') modeBadgeText = `⚔️ ${modeBadgeText} (2ฝั่ง)`;
+  else if (mode === '3player') modeBadgeText = `🔁 ${modeBadgeText} (3ฝั่ง)`;
+  dom.gameModeBadge.textContent = modeBadgeText;
+  
   dom.gameCreator.textContent = data.creator || '-';
-  dom.gameRange.textContent = data.modeName || `${min}-${max}`;
+  dom.gameRange.textContent = modeBadgeText;
   
   if (data.players) {
     dom.gamePlayerCount.textContent = data.players.length;
@@ -709,6 +819,8 @@ function backToLobby() {
   dom.winnerModal.style.display = 'none';
   state.currentGameId = null;
   state.isCreator = false;
+  state.currentTurnPlayer = null;
+  dom.turnIndicator.style.display = 'none';
   showScreen('lobby-screen');
   if (socket && socket.connected) {
     socket.emit('join_lobby', { username: state.username });
@@ -742,15 +854,20 @@ function renderGamesList(games) {
     const statusText = game.status === 'playing' ? '🎯 กำลังเล่น' : '⏳ รอ';
     const statusClass = game.status === 'playing' ? 'playing' : '';
     
+    // Game mode badge
+    let modeBadge = '';
+    if (game.mode === '2player') modeBadge = '<span class="badge" style="background:rgba(139,92,246,0.15);color:#a78bfa;font-size:10px">⚔️ 2ฝั่ง</span>';
+    else if (game.mode === '3player') modeBadge = '<span class="badge" style="background:rgba(139,92,246,0.15);color:#a78bfa;font-size:10px">🔁 3ฝั่ง</span>';
+    
     return `
       <div class="game-item" onclick="joinGame('${game.id}')">
         <div class="game-item-info">
           <div class="game-item-name">
-            ${mc.badge} ${game.modeName || game.range}
+            ${mc.badge} ${game.modeName || game.range} ${modeBadge}
           </div>
           <div class="game-item-detail">
             <span>👑 ${game.creator}</span>
-            <span>👥 ${game.playerCount}/10</span>
+            <span>👥 ${game.playerCount}/${game.maxPlayers || 10}</span>
             <span class="badge badge-status ${statusClass}">${statusText}</span>
           </div>
         </div>
@@ -893,6 +1010,13 @@ if (storedUser) {
 const activeMode = document.querySelector('.mode-btn.active');
 if (activeMode) {
   dom.modeLimitBadge.textContent = `🎯 ${activeMode.dataset.limit || 7} ครั้ง`;
+}
+
+// Set initial gameplay mode hint
+const activeGMode = document.querySelector('.gmode-btn.active');
+if (activeGMode) {
+  dom.gmodeHint.textContent = `📋 ${activeGMode.dataset.desc || 'ทุกคนทายได้ทันที'}`;
+  state.gameMode = activeGMode.dataset.mode || 'free';
 }
 
 console.log('🎯 เกมทายเลขพร้อมเล่น!');

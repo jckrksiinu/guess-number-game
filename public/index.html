@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🎯 เกมทายเลข ออนไลน์</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="favicon.png">
   <link rel="stylesheet" href="css/style.css">
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
@@ -64,8 +66,32 @@
           <!-- Create Game Card -->
           <div class="card glass create-game-card">
             <h2 class="card-title">🎮 สร้างเกมใหม่</h2>
+            
+            <!-- Gameplay Mode Selector -->
             <div class="form-group">
-              <label>เลือกโหมด <span class="badge limit-badge" id="mode-limit-badge">🎯 7 ครั้ง</span></label>
+              <label>รูปแบบการเล่น</label>
+              <div class="gameplay-mode-selector">
+                <button class="gmode-btn active" data-mode="free" data-desc="ทุกคนทายพร้อมกัน">
+                  <span class="gmode-icon">🆓</span>
+                  <span class="gmode-text">โหมดปกติ</span>
+                  <span class="gmode-desc">ทุกคนทายพร้อมกัน</span>
+                </button>
+                <button class="gmode-btn" data-mode="2player" data-desc="2 คนผลัดกันทาย">
+                  <span class="gmode-icon">⚔️</span>
+                  <span class="gmode-text">2 ฝั่ง</span>
+                  <span class="gmode-desc">2 คนผลัดกันทาย</span>
+                </button>
+                <button class="gmode-btn" data-mode="3player" data-desc="3 คนผลัดกันทาย">
+                  <span class="gmode-icon">🔁</span>
+                  <span class="gmode-text">3 ฝั่ง</span>
+                  <span class="gmode-desc">3 คนผลัดกันทาย</span>
+                </button>
+              </div>
+              <p class="form-hint" id="gmode-hint">📋 ทุกคนทายได้ทันที ไม่ต้องรอคิว</p>
+            </div>
+
+            <div class="form-group">
+              <label>ช่วงตัวเลข <span class="badge limit-badge" id="mode-limit-badge">🎯 7 ครั้ง</span></label>
               <div class="mode-selector">
                 <button class="mode-btn active" data-range="1-100" data-limit="7">
                   <span class="mode-icon">🟢</span>
@@ -182,6 +208,13 @@
                 <span class="info-value" id="remaining-guesses">-/-</span>
               </div>
             </div>
+          </div>
+
+          <!-- Turn Indicator -->
+          <div id="turn-indicator" class="turn-indicator" style="display:none">
+            <span class="turn-icon">🎯</span>
+            <span class="turn-label">ตาปัจจุบัน:</span>
+            <span class="turn-player" id="turn-player-name">-</span>
           </div>
 
           <!-- Guessing Area -->
