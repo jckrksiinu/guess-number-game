@@ -59,6 +59,7 @@ const dom = {
   gameStatusBadge: $('game-status-badge'),
   gameUsernameDisplay: $('game-username-display'),
   gameCreator: $('game-creator'),
+  gameCreatorLabel: $('game-creator-label'),
   gameRange: $('game-range'),
   gamePlayerCount: $('game-player-count'),
   gameGuessCount: $('game-guess-count'),
@@ -359,6 +360,7 @@ function initSocket() {
       }
     }
     dom.gameCreator.textContent = data.newCreator;
+    dom.gameCreatorLabel.textContent = (state.gameMode === 'free') ? '👑 ผู้ตั้งเลข' : '👑 เจ้าของห้อง';
   });
 
   // --- Game Status Change ---
@@ -708,6 +710,8 @@ function enterGameScreen(data) {
   dom.gameModeBadge.textContent = modeBadgeText;
   
   dom.gameCreator.textContent = data.creator || '-';
+  // Change label based on mode
+  dom.gameCreatorLabel.textContent = (mode === 'free') ? '👑 ผู้ตั้งเลข' : '👑 เจ้าของห้อง';
   dom.gameRange.textContent = modeBadgeText;
   
   if (data.players) {
