@@ -1387,7 +1387,31 @@ dom.rankedBackToLobbyBtn.addEventListener('click', () => {
 
 // --- Ranked Play Again ---
 dom.rankedPlayAgainBtn.addEventListener('click', () => {
-  resetRankedState();
+  dom.rankedResultModal.style.display = 'none';
+  state.rankedRole = null;
+  state.rankedMatchId = null;
+  state.rankedOpponent = null;
+  state.rankedGuesses = [];
+  state.rankedRemainingGuesses = 7;
+  state.rankedMaxGuesses = 7;
+  state.rankedReady = false;
+  state.currentGameId = null;
+  
+  // Reset ranked game areas
+  dom.rankedSetterArea.style.display = 'none';
+  dom.rankedGuesserWaiting.style.display = 'none';
+  dom.rankedGuessingArea.style.display = 'none';
+  dom.rankedSetterWaiting.style.display = 'none';
+  dom.rankedGuessFeedback.style.display = 'none';
+  dom.rankedGuessProgress.style.display = 'none';
+  
+  // Stay on ranked screen, show queue
+  dom.rankedScreen.classList.add('active');
+  dom.lobbyScreen.classList.remove('active');
+  dom.rankedLobbyContainer.style.display = 'block';
+  dom.rankedGameContainer.style.display = 'none';
+  dom.rankedQueueOverlay.style.display = 'flex';
+  
   if (!state.rankedMyRank) {
     socket.emit('get_rank_info', { username: state.username });
   }
