@@ -24,6 +24,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const DATA_DIR = path.join(__dirname, 'data');
 const leaderboardFile = path.join(DATA_DIR, 'leaderboard.json');
 const usersFile = path.join(DATA_DIR, 'users.json');
+const ranksFile = path.join(DATA_DIR, 'ranks.json');
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -121,6 +122,113 @@ function saveLeaderboard() {
 
 loadLeaderboard();
 
+// ========== RANKED MODE ==========
+
+const RANK_TIERS = ['F', 'E', 'D', 'C', 'B', 'A'];
+const RANK_NAMES = { F: 'บรอนซ์', E: 'เงิน', D: 'ทอง', C: 'แพลตตินัม', B: 'ไดมอนด์', A: 'มาสเตอร์' };
+const STARS_PER_RANK = 4;
+const WINS_PER_STAR = 2; // 2 wins = 1 star
+
+let ranksData = {};
+let rankedQueue = []; // array of { socketId, username }
+let rankedMatches = {}; // rankedMatchId -> { ... game state }
+
+function loadRanks() {
+  try {
+    if (fs.existsSync(ranksFile)) {
+      ranksData = JSON.parse(fs.readFileSync(ranksFile, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Failed to load ranks:', e.message);
+    ranksData = {};
+  }
+}
+
+function saveRanks() {
+  try {
+    fs.writeFileSync(ranksFile, JSON.stringify(ranksData, null, 2));
+  } catch (e) {
+    console.error('Failed to save ranks:', e.message);
+  }
+}
+
+function getDefaultRankData() {
+  return { rank: 'F', stars: 0, wins: 0, losses: 0, winStreak: 0, bestRank: 'F', starProgress: 0 };
+}
+
+function getOrCreateRank(username) {
+  if (!ranksData[username]) {
+    ranksData[username] = getDefaultRankData();
+  }
+  return ranksData[username];
+}
+
+function getRankIndex(rank) {
+  const idx = RANK_TIERS.indexOf(rank);
+  return idx >= 0 ? idx : 0;
+}
+
+function updateRankAfterWin(username) {
+  const rd = getOrCreateRank(username);
+  rd.wins += 1;
+  rd.winStreak += 1;
+  
+  // starProgress: 0.5 per win (2 wins = 1 star)
+  rd.starProgress += 0.5;
+  
+  // Check if enough for a star
+  if (rd.starProgress >= 1) {
+    rd.starProgress -= 1;
+    rd.stars += 1;
+    
+    // Check if enough stars for rank up
+    if (rd.stars >= STARS_PER_RANK) {
+      const curIdx = getRankIndex(rd.rank);
+      if (curIdx < RANK_TIERS.length - 1) {
+        rd.rank = RANK_TIERS[curIdx + 1];
+        rd.stars = 0;
+        rd.starProgress = 0;
+      } else {
+        // Already max rank (A), keep stars at max
+        rd.stars = STARS_PER_RANK - 1;
+        rd.starProgress = 0;
+      }
+    }
+  }
+  
+  // Track best rank
+  if (getRankIndex(rd.rank) > getRankIndex(rd.bestRank)) {
+    rd.bestRank = rd.rank;
+  }
+  
+  saveRanks();
+  return rd;
+}
+
+function updateRankAfterLoss(username) {
+  const rd = getOrCreateRank(username);
+  rd.losses += 1;
+  rd.winStreak = 0;
+  saveRanks();
+  return rd;
+}
+
+function getLeaderboardInfo(username) {
+  const rd = ranksData[username];
+  if (!rd) return null;
+  return {
+    username,
+    rank: rd.rank,
+    stars: rd.stars,
+    wins: rd.wins,
+    losses: rd.losses,
+    winStreak: rd.winStreak,
+    bestRank: rd.bestRank
+  };
+}
+
+loadRanks();
+
 // ========== GAME STATE ==========
 
 const games = {};
@@ -133,7 +241,107 @@ const GUESS_LIMITS = {
   '1-1000': 12
 };
 
-// ========== HELPERS ==========
+// ========== RANKED MATCHMAKING ==========
+
+let rankedMatchCounter = 0;
+
+function tryMatchPlayers() {
+  while (rankedQueue.length >= 2) {
+    // Take first 2 players
+    const p1 = rankedQueue.shift();
+    const p2 = rankedQueue.shift();
+    
+    // Check both sockets still connected
+    if (!playerSockets[p1.socketId] || !playerSockets[p2.socketId]) {
+      // Re-add connected player if one disconnected
+      if (playerSockets[p1.socketId]) rankedQueue.unshift(p1);
+      else if (playerSockets[p2.socketId]) rankedQueue.unshift(p2);
+      continue;
+    }
+    
+    // Check neither is in another game
+    if (playerSockets[p1.socketId]?.gameId || playerSockets[p2.socketId]?.gameId) {
+      // Re-add the one not in a game
+      if (!playerSockets[p1.socketId]?.gameId) rankedQueue.unshift(p1);
+      if (!playerSockets[p2.socketId]?.gameId) rankedQueue.unshift(p2);
+      continue;
+    }
+    
+    // Create match
+    rankedMatchCounter++;
+    const matchId = 'R' + String(rankedMatchCounter).padStart(4, '0');
+    
+    // Randomly decide who sets and who guesses
+    const p1isSetter = Math.random() < 0.5;
+    const setter = p1isSetter ? p1 : p2;
+    const guesser = p1isSetter ? p2 : p1;
+    
+    const match = {
+      id: matchId,
+      setter: setter.username,
+      guesser: guesser.username,
+      setterSocket: setter.socketId,
+      guesserSocket: guesser.socketId,
+      number: null,
+      guesses: [],
+      status: 'setting', // 'setting' -> 'guessing' -> 'finished'
+      winner: null,
+      startTime: null,
+      createdAt: Date.now()
+    };
+    
+    rankedMatches[matchId] = match;
+    
+    // Mark both as in a game
+    if (playerSockets[setter.socketId]) playerSockets[setter.socketId].gameId = matchId;
+    if (playerSockets[guesser.socketId]) playerSockets[guesser.socketId].gameId = matchId;
+    
+    // Join both to the match room
+    const s1Socket = io.sockets.sockets.get(setter.socketId);
+    const s2Socket = io.sockets.sockets.get(guesser.socketId);
+    if (s1Socket) s1Socket.join(matchId);
+    if (s2Socket) s2Socket.join(matchId);
+    
+    // Notify both players
+    const setterInfo = getLeaderboardInfo(setter.username);
+    const guesserInfo = getLeaderboardInfo(guesser.username);
+    
+    io.to(setter.socketId).emit('ranked_match_found', {
+      matchId,
+      role: 'setter',
+      opponent: guesser.username,
+      opponentRank: guesserInfo,
+      myRank: setterInfo,
+      range: '1-100',
+      maxGuesses: 7
+    });
+    
+    io.to(guesser.socketId).emit('ranked_match_found', {
+      matchId,
+      role: 'guesser',
+      opponent: setter.username,
+      opponentRank: setterInfo,
+      myRank: guesserInfo,
+      range: '1-100',
+      maxGuesses: 7
+    });
+    
+    console.log(`🎲 Ranked match ${matchId}: ${setter.username}(setter) vs ${guesser.username}(guesser)`);
+    
+    // Auto-cleanup after 5 minutes
+    setTimeout(() => {
+      if (rankedMatches[matchId] && rankedMatches[matchId].status !== 'finished') {
+        console.log(`🧹 Ranked match ${matchId} timed out`);
+        io.to(matchId).emit('ranked_match_cancelled', { reason: 'หมดเวลา' });
+        delete rankedMatches[matchId];
+      }
+    }, 300000);
+  }
+}
+
+function getRankInfo(username) {
+  return getLeaderboardInfo(username);
+}
 
 function generateGameId() {
   let id;
@@ -616,14 +824,247 @@ io.on('connection', (socket) => {
 
   // --- LEAVE GAME ---
   socket.on('leave_game', ({ gameId }) => {
+    // Check if it's a ranked match
+    if (rankedMatches[gameId]) {
+      handleRankedPlayerLeave(socket.id, gameId);
+      return;
+    }
     handlePlayerLeave(socket.id, gameId);
+  });
+
+  // ========== RANKED MODE ==========
+
+  // --- JOIN RANKED QUEUE ---
+  socket.on('join_ranked_queue', ({ username }) => {
+    const cleanName = (username || '').trim().slice(0, 20);
+    if (!cleanName) {
+      socket.emit('error', { message: 'กรุณาระบุชื่อผู้เล่น' });
+      return;
+    }
+    
+    // Check if already in queue
+    if (rankedQueue.some(q => q.username === cleanName)) {
+      socket.emit('error', { message: 'คุณอยู่ในคิวรอจับคู่แล้ว' });
+      return;
+    }
+    
+    // Check if in a game
+    const info = playerSockets[socket.id];
+    if (info && info.gameId) {
+      socket.emit('error', { message: 'คุณอยู่ในเกมแล้ว กรุณาออกจากเกมก่อน' });
+      return;
+    }
+    
+    rankedQueue.push({ socketId: socket.id, username: cleanName });
+    console.log(`🎯 ${cleanName} joined ranked queue (queue: ${rankedQueue.length})`);
+    socket.emit('ranked_queue_status', { position: rankedQueue.length, queued: true });
+    
+    // Try to match
+    tryMatchPlayers();
+  });
+
+  // --- LEAVE RANKED QUEUE ---
+  socket.on('leave_ranked_queue', () => {
+    const idx = rankedQueue.findIndex(q => q.socketId === socket.id);
+    if (idx >= 0) {
+      const [leaver] = rankedQueue.splice(idx, 1);
+      console.log(`🚫 ${leaver.username} left ranked queue`);
+      socket.emit('ranked_queue_left');
+    }
+  });
+
+  // --- SET RANKED NUMBER ---
+  socket.on('set_ranked_number', ({ matchId, number }) => {
+    const match = rankedMatches[matchId];
+    if (!match) {
+      socket.emit('error', { message: 'ไม่พบการแข่งขัน' });
+      return;
+    }
+    if (match.setter !== (playerSockets[socket.id]?.username)) {
+      socket.emit('error', { message: 'คุณไม่ได้เป็นคนตั้งเลข' });
+      return;
+    }
+    const num = parseInt(number);
+    if (isNaN(num) || num < 1 || num > 100) {
+      socket.emit('error', { message: 'กรุณาใส่เลขระหว่าง 1-100' });
+      return;
+    }
+    
+    match.number = num;
+    match.status = 'guessing';
+    match.startTime = Date.now();
+    
+    // Notify guesser that number is set and they can start guessing
+    io.to(match.guesserSocket).emit('ranked_guess_start', {
+      matchId: match.id,
+      range: '1-100',
+      maxGuesses: 7,
+      guesser: match.guesser,
+      setter: match.setter
+    });
+    
+    // Notify setter that number is accepted
+    io.to(match.setterSocket).emit('ranked_number_set', {
+      matchId: match.id,
+      number: num
+    });
+    
+    console.log(`🎯 Ranked ${matchId}: ${match.setter} set number ${num}`);
+  });
+
+  // --- RANKED GUESS ---
+  socket.on('ranked_guess', ({ matchId, guess }) => {
+    const match = rankedMatches[matchId];
+    if (!match) {
+      socket.emit('error', { message: 'ไม่พบการแข่งขัน' });
+      return;
+    }
+    if (match.status !== 'guessing') {
+      socket.emit('error', { message: 'ยังไม่ถึงรอบทายหรือเกมจบแล้ว' });
+      return;
+    }
+    const username = playerSockets[socket.id]?.username;
+    if (username !== match.guesser) {
+      socket.emit('error', { message: 'คุณไม่ได้เป็นผู้ทาย' });
+      return;
+    }
+    
+    const guessNum = parseInt(guess);
+    if (isNaN(guessNum) || guessNum < 1 || guessNum > 100) {
+      socket.emit('error', { message: 'กรุณาใส่เลขระหว่าง 1-100' });
+      return;
+    }
+    
+    // Check if already guessed
+    if (match.guesses.some(g => g.guess === guessNum)) {
+      socket.emit('error', { message: 'เลขนี้เคยทายไปแล้ว' });
+      return;
+    }
+    
+    match.guesses.push({ guess: guessNum, timestamp: Date.now() });
+    const target = match.number;
+    let result, hint;
+    
+    if (guessNum === target) {
+      result = 'correct';
+      hint = '🎉 ถูกต้อง!';
+      match.status = 'finished';
+      match.winner = match.guesser;
+      
+      // Update ranks
+      updateRankAfterWin(match.guesser);
+      updateRankAfterLoss(match.setter);
+      
+      // Emit result
+      io.to(match.setterSocket).emit('ranked_game_result', {
+        matchId: match.id,
+        winner: match.guesser,
+        number: target,
+        guesses: match.guesses,
+        result: 'loss',
+        guesserRank: getLeaderboardInfo(match.guesser),
+        setterRank: getLeaderboardInfo(match.setter)
+      });
+      io.to(match.guesserSocket).emit('ranked_game_result', {
+        matchId: match.id,
+        winner: match.guesser,
+        number: target,
+        guesses: match.guesses,
+        result: 'win',
+        guesserRank: getLeaderboardInfo(match.guesser),
+        setterRank: getLeaderboardInfo(match.setter)
+      });
+      
+      console.log(`🏆 Ranked ${matchId}: ${match.guesser} guessed correctly!`);
+      
+    } else if (guessNum < target) {
+      result = 'higher';
+      hint = '⬆️ เลขสูงกว่า ' + guessNum;
+    } else {
+      result = 'lower';
+      hint = '⬇️ เลขต่ำกว่า ' + guessNum;
+    }
+    
+    const remaining = 7 - match.guesses.length;
+    
+    // Send guess result
+    io.to(match.setterSocket).emit('ranked_guess_result', {
+      guess: guessNum,
+      result,
+      hint,
+      remaining,
+      total: 7,
+      guesses: match.guesses
+    });
+    io.to(match.guesserSocket).emit('ranked_guess_result', {
+      guess: guessNum,
+      result,
+      hint,
+      remaining,
+      total: 7,
+      guesses: match.guesses
+    });
+    
+    // Check if guesser ran out
+    if (result !== 'correct' && match.guesses.length >= 7) {
+      match.status = 'finished';
+      match.winner = match.setter;
+      
+      // Update ranks
+      updateRankAfterWin(match.setter);
+      updateRankAfterLoss(match.guesser);
+      
+      io.to(match.setterSocket).emit('ranked_game_result', {
+        matchId: match.id,
+        winner: match.setter,
+        number: target,
+        guesses: match.guesses,
+        result: 'win',
+        guesserRank: getLeaderboardInfo(match.guesser),
+        setterRank: getLeaderboardInfo(match.setter)
+      });
+      io.to(match.guesserSocket).emit('ranked_game_result', {
+        matchId: match.id,
+        winner: match.setter,
+        number: target,
+        guesses: match.guesses,
+        result: 'loss',
+        guesserRank: getLeaderboardInfo(match.guesser),
+        setterRank: getLeaderboardInfo(match.setter)
+      });
+      
+      console.log(`🏆 Ranked ${matchId}: ${match.setter} won (guesser out of guesses)`);
+    }
+    
+    console.log(`🔢 Ranked ${matchId}: ${match.guesser} guessed ${guessNum}: ${result}`);
+  });
+
+  // --- GET RANK INFO ---
+  socket.on('get_rank_info', ({ username }) => {
+    const cleanName = (username || '').trim().slice(0, 20);
+    if (!cleanName) return;
+    
+    const info = getOrCreateRank(cleanName);
+    const rd = getLeaderboardInfo(cleanName);
+    socket.emit('rank_info', rd);
   });
 
   // --- DISCONNECT ---
   socket.on('disconnect', () => {
     const info = playerSockets[socket.id];
     if (info && info.gameId) {
-      handlePlayerLeave(socket.id, info.gameId);
+      // Check if it's a ranked match
+      if (rankedMatches[info.gameId]) {
+        handleRankedPlayerLeave(socket.id, info.gameId);
+      } else {
+        handlePlayerLeave(socket.id, info.gameId);
+      }
+    }
+    // Remove from ranked queue if present
+    const qIdx = rankedQueue.findIndex(q => q.socketId === socket.id);
+    if (qIdx >= 0) {
+      rankedQueue.splice(qIdx, 1);
+      console.log(`🚫 ${info?.username || 'unknown'} disconnected, removed from ranked queue`);
     }
     delete playerSockets[socket.id];
     broadcastOnlineCount();
@@ -711,6 +1152,28 @@ function handlePlayerLeave(socketId, gameId) {
   }
 
   broadcastGamesList();
+}
+
+// ========== RANKED PLAYER LEAVE ==========
+
+function handleRankedPlayerLeave(socketId, matchId) {
+  const match = rankedMatches[matchId];
+  if (!match) return;
+  
+  const info = playerSockets[socketId];
+  const username = info?.username || 'unknown';
+  
+  // Cancel the match
+  io.to(matchId).emit('ranked_match_cancelled', { 
+    reason: `${username} ออกจากเกม` 
+  });
+  
+  // Clean up
+  if (playerSockets[match.setterSocket]) playerSockets[match.setterSocket].gameId = null;
+  if (playerSockets[match.guesserSocket]) playerSockets[match.guesserSocket].gameId = null;
+  
+  delete rankedMatches[matchId];
+  console.log(`🚫 ${username} left ranked match ${matchId}`);
 }
 
 // ========== PERIODIC BROADCAST ==========

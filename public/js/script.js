@@ -16,7 +16,18 @@ const state = {
   maxGuesses: 7,
   remainingGuesses: 7,
   gameMode: 'free',       // 'free', '2player', '3player'
-  currentTurnPlayer: null // username of current turn holder
+  currentTurnPlayer: null, // username of current turn holder
+  
+  // Ranked mode
+  rankedRole: null,        // 'setter' or 'guesser'
+  rankedMatchId: null,
+  rankedOpponent: null,
+  rankedMyRank: null,
+  rankedOpponentRank: null,
+  rankedGuesses: [],
+  rankedRemainingGuesses: 7,
+  rankedMaxGuesses: 7,
+  rankedReady: false
 };
 
 // ========== DOM REFS ==========
@@ -94,7 +105,58 @@ const dom = {
   backToLobbyBtn: $('back-to-lobby-btn'),
   
   // Toast
-  toastContainer: $('toast-container')
+  toastContainer: $('toast-container'),
+  
+  // Ranked
+  joinRankedBtn: $('join-ranked-btn'),
+  rankedQueueOverlay: $('ranked-queue-overlay'),
+  rankedQueueCount: $('ranked-queue-count'),
+  cancelRankedQueueBtn: $('cancel-ranked-queue-btn'),
+  rankedScreen: $('ranked-screen'),
+  rankedModeBadge: $('ranked-mode-badge'),
+  rankedStatusBadge: $('ranked-status-badge'),
+  rankedUsernameDisplay: $('ranked-username-display'),
+  rankedLeaveBtn: $('ranked-leave-btn'),
+  rankedMyName: $('ranked-my-name'),
+  rankedMyRankImg: $('ranked-my-rank-img'),
+  rankedMyRankName: $('ranked-my-rank-name'),
+  rankedOpponentName: $('ranked-opponent-name'),
+  rankedOpponentRankImg: $('ranked-opponent-rank-img'),
+  rankedOpponentRankName: $('ranked-opponent-rank-name'),
+  rankedSetterArea: $('ranked-setter-area'),
+  rankedSetNumberInput: $('ranked-set-number-input'),
+  rankedSetNumberBtn: $('ranked-set-number-btn'),
+  rankedSetHint: $('ranked-set-hint'),
+  rankedGuesserWaiting: $('ranked-guesser-waiting'),
+  rankedGuessingArea: $('ranked-guessing-area'),
+  rankedGuessInput: $('ranked-guess-input'),
+  rankedGuessBtn: $('ranked-guess-btn'),
+  rankedGuessFeedback: $('ranked-guess-feedback'),
+  rankedFeedbackText: $('ranked-feedback-text'),
+  rankedGuessProgress: $('ranked-guess-progress'),
+  rankedProgressFillBar: $('ranked-progress-fill-bar'),
+  rankedGuessProgressText: $('ranked-guess-progress-text'),
+  rankedSetterWaiting: $('ranked-setter-waiting'),
+  rankedSetterGuessHistory: $('ranked-setter-guess-history'),
+  rankedResultModal: $('ranked-result-modal'),
+  rankedResultIcon: $('ranked-result-icon'),
+  rankedResultTitle: $('ranked-result-title'),
+  rankedResultDesc: $('ranked-result-desc'),
+  rankedResultMyImg: $('ranked-result-my-img'),
+  rankedResultMyRank: $('ranked-result-my-rank'),
+  rankedResultMyStars: $('ranked-result-my-stars'),
+  rankedResultOpponentImg: $('ranked-result-opponent-img'),
+  rankedResultOpponentRank: $('ranked-result-opponent-rank'),
+  rankedResultOpponentStars: $('ranked-result-opponent-stars'),
+  rankedResultAnswer: $('ranked-result-answer'),
+  rankedResultNumber: $('ranked-result-number'),
+  rankedBackToLobbyBtn: $('ranked-back-to-lobby-btn'),
+  rankedPlayAgainBtn: $('ranked-play-again-btn'),
+  rankedBadgeImg: $('ranked-badge-img'),
+  rankedRankLabel: $('ranked-rank-label'),
+  rankedRankStars: $('ranked-rank-stars'),
+  rankedProgressFill: $('ranked-progress-fill'),
+  rankedProgressText: $('ranked-progress-text')
 };
 
 // ========== SOCKET ==========
@@ -142,6 +204,7 @@ function initSocket() {
     
     // Enter lobby
     socket.emit('join_lobby', { username: state.username });
+    socket.emit('get_rank_info', { username: state.username });
     showScreen('lobby-screen');
   });
 
@@ -481,6 +544,133 @@ function initSocket() {
     dom.onlineCount.textContent = `👥 ออนไลน์: ${count}`;
   });
 
+  // ========== RANKED MODE EVENTS ==========
+
+  // --- Rank Info ---
+  socket.on('rank_info', (data) => {
+    if (data) {
+      state.rankedMyRank = data;
+      updateRankedDisplay(data);
+    }
+  });
+
+  // --- Ranked Queue Status ---
+  socket.on('ranked_queue_status', (data) => {
+    dom.rankedQueueOverlay.style.display = 'flex';
+    dom.rankedQueueCount.textContent = data.position || 1;
+  });
+
+  // --- Ranked Queue Left ---
+  socket.on('ranked_queue_left', () => {
+    dom.rankedQueueOverlay.style.display = 'none';
+    state.rankedReady = false;
+  });
+
+  // --- Ranked Match Found ---
+  socket.on('ranked_match_found', (data) => {
+    dom.rankedQueueOverlay.style.display = 'none';
+    
+    state.rankedMatchId = data.matchId;
+    state.rankedRole = data.role;
+    state.rankedOpponent = data.opponent;
+    state.rankedMyRank = data.myRank;
+    state.rankedOpponentRank = data.opponentRank;
+    state.rankedGuesses = [];
+    state.rankedRemainingGuesses = data.maxGuesses;
+    state.rankedMaxGuesses = data.maxGuesses;
+    state.currentGameId = data.matchId;
+    
+    enterRankedScreen(data);
+  });
+
+  // --- Ranked Number Set (setter confirmed) ---
+  socket.on('ranked_number_set', (data) => {
+    dom.rankedSetterArea.style.display = 'none';
+    dom.rankedSetterWaiting.style.display = 'block';
+    dom.rankedStatusBadge.textContent = '⏳ รอคู่ต่อสู้ทาย';
+    showToast('✅ เลขถูกบันทึกแล้ว! รอคู่ต่อสู้ทาย...', 'success');
+  });
+
+  // --- Ranked Guess Start (guesser can start guessing) ---
+  socket.on('ranked_guess_start', (data) => {
+    dom.rankedGuesserWaiting.style.display = 'none';
+    dom.rankedGuessingArea.style.display = 'block';
+    dom.rankedStatusBadge.textContent = '🎯 กำลังทาย';
+    dom.rankedGuessInput.disabled = false;
+    dom.rankedGuessBtn.disabled = false;
+    dom.rankedGuessInput.focus();
+    showToast('🎯 คู่ต่อสู้ตั้งเลขแล้ว! มาเริ่มทายกัน!', 'info');
+  });
+
+  // --- Ranked Guess Result ---
+  socket.on('ranked_guess_result', (data) => {
+    state.rankedGuesses = data.guesses || [];
+    state.rankedRemainingGuesses = data.remaining;
+    
+    // Update progress
+    if (state.rankedRole === 'guesser') {
+      const used = state.rankedMaxGuesses - data.remaining;
+      const pct = (used / state.rankedMaxGuesses) * 100;
+      dom.rankedProgressFillBar.style.width = Math.min(pct, 100) + '%';
+      dom.rankedGuessProgressText.textContent = `ใช้ไป ${used}/${state.rankedMaxGuesses} ครั้ง`;
+      dom.rankedGuessProgress.style.display = 'flex';
+      
+      showGuessFeedbackRanked(data.result, data.hint);
+      
+      if (data.remaining <= 0) {
+        dom.rankedGuessInput.disabled = true;
+        dom.rankedGuessBtn.disabled = true;
+      }
+    }
+    
+    // Update setter's history
+    if (state.rankedRole === 'setter') {
+      renderRankedSetterHistory(data.guesses);
+    }
+  });
+
+  // --- Ranked Game Result ---
+  socket.on('ranked_game_result', (data) => {
+    dom.rankedScreen.classList.remove('active');
+    
+    const isWin = data.result === 'win';
+    dom.rankedResultIcon.textContent = isWin ? '🏆' : '😢';
+    dom.rankedResultTitle.textContent = isWin ? '🎉 คุณชนะ!' : '😞 คุณแพ้';
+    dom.rankedResultDesc.textContent = isWin 
+      ? `คุณ${state.rankedRole === 'guesser' ? 'ทาย' : ''}ชนะ ${data.winner}!` 
+      : `คู่ต่อสู้ชนะ! ${data.winner} ทายถูก`;
+    
+    // Update rank images
+    updateRankedResultImages(data);
+    
+    dom.rankedResultNumber.textContent = data.number;
+    dom.rankedResultAnswer.style.display = 'block';
+    
+    // Update my rank info
+    if (data.guesserRank && data.guesserRank.username === state.username) {
+      state.rankedMyRank = data.guesserRank;
+    } else if (data.setterRank && data.setterRank.username === state.username) {
+      state.rankedMyRank = data.setterRank;
+    }
+    if (state.rankedMyRank) {
+      updateRankedDisplay(state.rankedMyRank);
+    }
+    
+    dom.rankedResultModal.style.display = 'flex';
+  });
+
+  // --- Ranked Match Cancelled ---
+  socket.on('ranked_match_cancelled', (data) => {
+    dom.rankedScreen.classList.remove('active');
+    showToast(`❌ แมตช์ถูกยกเลิก: ${data.reason}`, 'error');
+    resetRankedState();
+    showScreen('lobby-screen');
+    if (socket && socket.connected) {
+      socket.emit('join_lobby', { username: state.username });
+      socket.emit('get_rank_info', { username: state.username });
+    }
+  });
+
   // --- Error ---
   socket.on('error', (data) => {
     showToast(data.message, 'error');
@@ -677,6 +867,7 @@ dom.changeNameBtn.addEventListener('click', () => {
     dom.gameUsernameDisplay.textContent = state.username;
     if (socket && socket.connected) {
       socket.emit('join_lobby', { username: state.username });
+      socket.emit('get_rank_info', { username: state.username });
     }
     showToast(`✅ เปลี่ยนชื่อเป็น ${state.username} แล้ว`, 'success');
   }
@@ -879,8 +1070,276 @@ function backToLobby() {
   showScreen('lobby-screen');
   if (socket && socket.connected) {
     socket.emit('join_lobby', { username: state.username });
+    socket.emit('get_rank_info', { username: state.username });
   }
 }
+
+// ========== RANKED MODE ==========
+
+const RANK_TIERS = ['F', 'E', 'D', 'C', 'B', 'A'];
+const RANK_NAMES = { F: 'บรอนซ์', E: 'เงิน', D: 'ทอง', C: 'แพลตตินัม', B: 'ไดมอนด์', A: 'มาสเตอร์' };
+
+function getRankImagePath(rank) {
+  return `images/ranks/${rank || 'F'}.png`;
+}
+
+function updateRankedDisplay(data) {
+  if (!data) return;
+  const rank = data.rank || 'F';
+  const stars = data.stars || 0;
+  const starsText = '⭐'.repeat(stars) + '☆'.repeat(Math.max(0, 4 - stars));
+  
+  dom.rankedBadgeImg.src = getRankImagePath(rank);
+  dom.rankedRankLabel.textContent = `${RANK_NAMES[rank] || 'บรอนซ์'} (${rank})`;
+  dom.rankedRankStars.textContent = starsText;
+  
+  // Progress bar
+  const progress = data.starProgress || 0;
+  const pct = (progress / 1) * 100;
+  dom.rankedProgressFill.style.width = Math.min(pct, 100) + '%';
+  
+  const totalStars = data.stars;
+  dom.rankedProgressText.textContent = `${totalStars} / 4 ⭐`;
+  
+  if (rank === 'A') {
+    dom.rankedProgressText.textContent = '🥇 สูงสุดแล้ว!';
+    dom.rankedProgressFill.style.width = '100%';
+  }
+}
+
+function enterRankedScreen(data) {
+  showScreen('ranked-screen');
+  dom.rankedUsernameDisplay.textContent = state.username;
+  dom.rankedModeBadge.textContent = '🏆 จัดอันดับ';
+  dom.rankedStatusBadge.textContent = data.role === 'setter' ? '⏳ ตั้งเลข' : '⏳ รอคู่ต่อสู้';
+  
+  // Set player info
+  dom.rankedMyName.textContent = state.username;
+  dom.rankedOpponentName.textContent = data.opponent;
+  
+  // Rank images
+  const myRank = data.myRank?.rank || 'F';
+  const oppRank = data.opponentRank?.rank || 'F';
+  dom.rankedMyRankImg.src = getRankImagePath(myRank);
+  dom.rankedMyRankName.textContent = `${RANK_NAMES[myRank] || 'บรอนซ์'} (${myRank})`;
+  dom.rankedOpponentRankImg.src = getRankImagePath(oppRank);
+  dom.rankedOpponentRankName.textContent = `${RANK_NAMES[oppRank] || 'บรอนซ์'} (${oppRank})`;
+  
+  // Show appropriate area
+  dom.rankedSetterArea.style.display = 'none';
+  dom.rankedGuesserWaiting.style.display = 'none';
+  dom.rankedGuessingArea.style.display = 'none';
+  dom.rankedSetterWaiting.style.display = 'none';
+  
+  if (data.role === 'setter') {
+    dom.rankedSetterArea.style.display = 'block';
+    dom.rankedSetNumberInput.value = '';
+    dom.rankedSetNumberInput.focus();
+  } else {
+    dom.rankedGuesserWaiting.style.display = 'block';
+  }
+  
+  dom.rankedGuessProgress.style.display = 'none';
+  
+  // Reset guess feedback
+  dom.rankedGuessFeedback.style.display = 'none';
+  dom.rankedGuessInput.value = '';
+  dom.rankedGuessInput.disabled = true;
+  dom.rankedGuessBtn.disabled = true;
+  
+  // Reset setter history
+  dom.rankedSetterGuessHistory.innerHTML = `<div class="empty-state small"><p>รอการทาย...</p></div>`;
+}
+
+function showGuessFeedbackRanked(result, hint) {
+  const fb = dom.rankedGuessFeedback;
+  const text = dom.rankedFeedbackText;
+  
+  fb.style.display = 'block';
+  text.textContent = hint;
+  
+  const content = fb.querySelector('.feedback-content');
+  content.className = 'feedback-content';
+  
+  if (result === 'higher') content.classList.add('feedback-higher');
+  else if (result === 'lower') content.classList.add('feedback-lower');
+  else if (result === 'correct') content.classList.add('feedback-correct');
+  
+  clearTimeout(fb._timeout);
+  fb._timeout = setTimeout(() => {
+    fb.style.display = 'none';
+  }, 4000);
+}
+
+function renderRankedSetterHistory(guesses) {
+  if (!guesses || guesses.length === 0) {
+    dom.rankedSetterGuessHistory.innerHTML = `<div class="empty-state small"><p>รอการทาย...</p></div>`;
+    return;
+  }
+  
+  dom.rankedSetterGuessHistory.innerHTML = guesses.map((g, i) => {
+    let resultText = '';
+    if (g.result === 'higher') resultText = '⬆️ สูงกว่า';
+    else if (g.result === 'lower') resultText = '⬇️ ต่ำกว่า';
+    else if (g.result === 'correct') resultText = '🎉 ถูกต้อง!';
+    
+    return `
+      <div class="history-item ${g.result}">
+        <span class="history-username">คู่ต่อสู้</span>
+        <span class="history-guess">${g.guess}</span>
+        <span class="history-result">${resultText}</span>
+      </div>
+    `;
+  }).join('');
+  
+  dom.rankedSetterGuessHistory.scrollTop = dom.rankedSetterGuessHistory.scrollHeight;
+}
+
+function updateRankedResultImages(data) {
+  let myR, oppR;
+  if (state.rankedRole === 'guesser') {
+    myR = data.guesserRank;
+    oppR = data.setterRank;
+  } else {
+    myR = data.setterRank;
+    oppR = data.guesserRank;
+  }
+  
+  const myRank = myR?.rank || 'F';
+  const oppRank = oppR?.rank || 'F';
+  const myStars = '⭐'.repeat(myR?.stars || 0) + '☆'.repeat(Math.max(0, 4 - (myR?.stars || 0)));
+  const oppStars = '⭐'.repeat(oppR?.stars || 0) + '☆'.repeat(Math.max(0, 4 - (oppR?.stars || 0)));
+  
+  dom.rankedResultMyImg.src = getRankImagePath(myRank);
+  dom.rankedResultMyRank.textContent = `${RANK_NAMES[myRank] || 'บรอนซ์'} (${myRank})`;
+  dom.rankedResultMyStars.textContent = myStars;
+  
+  dom.rankedResultOpponentImg.src = getRankImagePath(oppRank);
+  dom.rankedResultOpponentRank.textContent = `${RANK_NAMES[oppRank] || 'บรอนซ์'} (${oppRank})`;
+  dom.rankedResultOpponentStars.textContent = oppStars;
+}
+
+function resetRankedState() {
+  state.rankedRole = null;
+  state.rankedMatchId = null;
+  state.rankedOpponent = null;
+  state.rankedGuesses = [];
+  state.rankedRemainingGuesses = 7;
+  state.rankedMaxGuesses = 7;
+  state.rankedReady = false;
+  state.currentGameId = null;
+  
+  dom.rankedResultModal.style.display = 'none';
+  dom.rankedQueueOverlay.style.display = 'none';
+  dom.rankedScreen.classList.remove('active');
+}
+
+// --- Join Ranked Queue ---
+dom.joinRankedBtn.addEventListener('click', () => {
+  if (!state.username) {
+    showToast('กรุณาเข้าสู่ระบบก่อน', 'error');
+    return;
+  }
+  if (!socket || !socket.connected) {
+    showToast('กำลังเชื่อมต่อเซิร์ฟเวอร์...', 'error');
+    return;
+  }
+  if (!state.rankedMyRank) {
+    socket.emit('get_rank_info', { username: state.username });
+  }
+  socket.emit('join_ranked_queue', { username: state.username });
+});
+
+// --- Cancel Ranked Queue ---
+dom.cancelRankedQueueBtn.addEventListener('click', () => {
+  if (socket && socket.connected) {
+    socket.emit('leave_ranked_queue');
+  }
+  dom.rankedQueueOverlay.style.display = 'none';
+});
+
+// --- Set Ranked Number ---
+dom.rankedSetNumberBtn.addEventListener('click', () => {
+  const num = parseInt(dom.rankedSetNumberInput.value);
+  if (!num || num < 1 || num > 100) {
+    showToast('กรุณาใส่เลขระหว่าง 1-100', 'error');
+    dom.rankedSetNumberInput.focus();
+    return;
+  }
+  if (!state.rankedMatchId) {
+    showToast('ไม่พบแมตช์', 'error');
+    return;
+  }
+  socket.emit('set_ranked_number', { matchId: state.rankedMatchId, number: num });
+});
+
+dom.rankedSetNumberInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') dom.rankedSetNumberBtn.click();
+});
+
+// --- Make Ranked Guess ---
+dom.rankedGuessBtn.addEventListener('click', () => {
+  makeRankedGuess();
+});
+
+dom.rankedGuessInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') makeRankedGuess();
+});
+
+function makeRankedGuess() {
+  const guess = parseInt(dom.rankedGuessInput.value);
+  if (!guess || guess < 1 || guess > 100) {
+    showToast('กรุณาใส่เลขระหว่าง 1-100', 'error');
+    dom.rankedGuessInput.focus();
+    return;
+  }
+  if (!state.rankedMatchId) {
+    showToast('ไม่ได้อยู่ในแมตช์', 'error');
+    return;
+  }
+  if (state.rankedRemainingGuesses <= 0) {
+    showToast('❌ ใช้โอกาสทายหมดแล้ว!', 'error');
+    return;
+  }
+  
+  socket.emit('ranked_guess', { matchId: state.rankedMatchId, guess: guess });
+  dom.rankedGuessInput.value = '';
+  dom.rankedGuessInput.focus();
+}
+
+// --- Leave Ranked Match ---
+dom.rankedLeaveBtn.addEventListener('click', () => {
+  if (state.rankedMatchId && socket && socket.connected) {
+    socket.emit('leave_game', { gameId: state.rankedMatchId });
+  }
+  resetRankedState();
+  showScreen('lobby-screen');
+  if (socket && socket.connected) {
+    socket.emit('join_lobby', { username: state.username });
+  }
+});
+
+// --- Ranked Back to Lobby ---
+dom.rankedBackToLobbyBtn.addEventListener('click', () => {
+  resetRankedState();
+  showScreen('lobby-screen');
+  if (socket && socket.connected) {
+    socket.emit('join_lobby', { username: state.username });
+    socket.emit('get_rank_info', { username: state.username });
+  }
+});
+
+// --- Ranked Play Again ---
+dom.rankedPlayAgainBtn.addEventListener('click', () => {
+  resetRankedState();
+  if (!state.rankedMyRank) {
+    socket.emit('get_rank_info', { username: state.username });
+  }
+  socket.emit('join_ranked_queue', { username: state.username });
+});
+
+// Override leave_game to also handle ranked
+const originalLeaveGame = socket?.emit ? true : false;
 
 // ========== RENDER FUNCTIONS ==========
 

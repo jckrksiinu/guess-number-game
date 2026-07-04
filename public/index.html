@@ -145,6 +145,32 @@
               </div>
             </div>
           </div>
+
+          <!-- Ranked Mode Card -->
+          <div class="card glass ranked-card">
+            <div class="ranked-card-header">
+              <div class="ranked-card-info">
+                <h2 class="card-title">🏆 โหมดจัดอันดับ</h2>
+                <p class="ranked-desc">จับคู่ 1v1 สะสมดาว เลื่อนแรงค์!</p>
+              </div>
+              <div class="ranked-current-rank" id="ranked-current-display">
+                <img src="images/ranks/F.png" alt="Rank" class="rank-badge-img" id="ranked-badge-img">
+                <div class="ranked-rank-text">
+                  <span class="rank-label" id="ranked-rank-label">บรอนซ์</span>
+                  <span class="rank-stars" id="ranked-rank-stars"></span>
+                </div>
+              </div>
+            </div>
+            <div class="ranked-progress">
+              <div class="ranked-progress-bar">
+                <div class="ranked-progress-fill" id="ranked-progress-fill" style="width:0%"></div>
+              </div>
+              <span class="ranked-progress-text" id="ranked-progress-text">0 / 4 ⭐</span>
+            </div>
+            <button id="join-ranked-btn" class="btn btn-primary btn-lg btn-full">
+              ⚔️ เล่นจัดอันดับ
+            </button>
+          </div>
         </div>
 
         <!-- Right Column - Leaderboard -->
@@ -314,6 +340,168 @@
 
       <!-- Error Toast -->
       <div id="toast-container"></div>
+    </div>
+
+    <!-- ============ RANKED QUEUE OVERLAY ============ -->
+    <div id="ranked-queue-overlay" class="modal-overlay" style="display:none">
+      <div class="modal-content glass ranked-queue-modal">
+        <div class="ranked-queue-animation">
+          <div class="searching-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+        <h2 class="ranked-queue-title">กำลังค้นหาคู่ต่อสู้...</h2>
+        <p class="ranked-queue-desc">ระบบกำลังจับคู่ผู้เล่นที่มีระดับใกล้เคียงกัน</p>
+        <div class="ranked-queue-info">
+          <span>👤 ในคิว: <strong id="ranked-queue-count">1</strong></span>
+        </div>
+        <button id="cancel-ranked-queue-btn" class="btn btn-danger btn-lg btn-full">
+          ❌ ยกเลิก
+        </button>
+      </div>
+    </div>
+
+    <!-- ============ RANKED GAME SCREEN ============ -->
+    <div id="ranked-screen" class="screen">
+      <nav class="top-nav glass game-top-nav">
+        <div class="nav-left">
+          <button id="ranked-leave-btn" class="btn btn-back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span>ออก</span>
+          </button>
+          <span class="nav-logo">🏆 แรงค์แมตช์</span>
+        </div>
+        <div class="nav-center">
+          <span class="badge badge-mode" id="ranked-mode-badge">🏆 จัดอันดับ</span>
+          <span class="badge badge-status" id="ranked-status-badge">⏳ กำลังตั้งเลข</span>
+        </div>
+        <div class="nav-right">
+          <span class="nav-user">👤 <span id="ranked-username-display"></span></span>
+        </div>
+      </nav>
+
+      <div class="ranked-content">
+        <!-- Opponent Info -->
+        <div class="ranked-opponents">
+          <div class="ranked-player-card" id="ranked-my-card">
+            <div class="ranked-player-avatar" id="ranked-my-avatar">👤</div>
+            <span class="ranked-player-name" id="ranked-my-name">-</span>
+            <div class="ranked-player-rank">
+              <img src="images/ranks/F.png" alt="" class="rank-mini-img" id="ranked-my-rank-img">
+              <span id="ranked-my-rank-name">-</span>
+            </div>
+          </div>
+          <div class="ranked-vs">⚔️ VS ⚔️</div>
+          <div class="ranked-player-card" id="ranked-opponent-card">
+            <div class="ranked-player-avatar" id="ranked-opponent-avatar">👤</div>
+            <span class="ranked-player-name" id="ranked-opponent-name">-</span>
+            <div class="ranked-player-rank">
+              <img src="images/ranks/F.png" alt="" class="rank-mini-img" id="ranked-opponent-rank-img">
+              <span id="ranked-opponent-rank-name">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game Area -->
+        <div class="ranked-game-area">
+          <!-- Setter: Number Input -->
+          <div id="ranked-setter-area" class="card glass" style="display:none">
+            <h3 class="card-title">🔢 ตั้งเลขให้คู่ต่อสู้ทาย</h3>
+            <p class="ranked-role-desc">คุณได้รับบทเป็น <strong>ผู้ตั้งเลข</strong> ตั้งเลข 1-100 ให้อีกฝ่ายทาย</p>
+            <div class="number-input-group" style="max-width:300px;margin:16px auto">
+              <input type="number" id="ranked-set-number-input" placeholder="1-100" min="1" max="100">
+              <button id="ranked-set-number-btn" class="btn btn-primary btn-lg">✅ ตกลง</button>
+            </div>
+            <p class="form-hint" id="ranked-set-hint">🔢 ใส่เลขระหว่าง 1-100</p>
+          </div>
+
+          <!-- Guesser: Wait for number -->
+          <div id="ranked-guesser-waiting" class="card glass" style="display:none">
+            <h3 class="card-title">⏳ รอคู่ต่อสู้ตั้งเลข...</h3>
+            <p class="ranked-role-desc">คุณได้รับบทเป็น <strong>ผู้ทาย</strong> รอให้อีกฝ่ายตั้งเลขก่อน</p>
+            <div class="searching-dots">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
+          </div>
+
+          <!-- Guesser: Guessing Area -->
+          <div id="ranked-guessing-area" class="card glass" style="display:none">
+            <h3 class="card-title">🔮 ทายเลข</h3>
+            <p class="ranked-role-desc">ทายเลข <strong>1-100</strong> ให้ถูกต้อง!</p>
+            <div class="guess-input-group" style="max-width:400px;margin:16px auto">
+              <input type="number" id="ranked-guess-input" placeholder="ใส่เลข..." min="1" max="100">
+              <button id="ranked-guess-btn" class="btn btn-primary btn-lg">🎯 ทาย!</button>
+            </div>
+            <div id="ranked-guess-feedback" class="guess-feedback" style="display:none">
+              <div class="feedback-content">
+                <span id="ranked-feedback-text"></span>
+              </div>
+            </div>
+            <div class="guess-progress" id="ranked-guess-progress" style="display:none;margin-top:16px">
+              <div class="guess-progress-bar">
+                <div class="guess-progress-fill" id="ranked-progress-fill-bar" style="width:0%"></div>
+              </div>
+              <span class="guess-progress-text" id="ranked-guess-progress-text">ใช้ไป 0/7 ครั้ง</span>
+            </div>
+          </div>
+
+          <!-- Setter: Waiting for guess -->
+          <div id="ranked-setter-waiting" class="card glass" style="display:none">
+            <h3 class="card-title">⏳ รอคู่ต่อสู้ทายเลข...</h3>
+            <p class="ranked-role-desc">คุณตั้งเลขแล้ว รอให้อีกฝ่ายทาย</p>
+            <div id="ranked-setter-guess-history" class="history-container" style="margin-top:12px;max-height:200px">
+              <div class="empty-state small"><p>รอการทาย...</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RANKED RESULT MODAL ============ -->
+    <div id="ranked-result-modal" class="modal-overlay" style="display:none">
+      <div class="modal-content glass ranked-result-modal">
+        <div class="ranked-result-icon" id="ranked-result-icon">🏆</div>
+        <h2 class="ranked-result-title" id="ranked-result-title">คุณชนะ!</h2>
+        <p class="ranked-result-desc" id="ranked-result-desc">ทายเลขถูกต้อง!</p>
+        
+        <div class="ranked-result-rank-change">
+          <div class="rank-change-item">
+            <span class="rank-change-label">ของคุณ</span>
+            <div class="rank-change-detail">
+              <img src="images/ranks/F.png" alt="" class="rank-change-img" id="ranked-result-my-img">
+              <div class="rank-change-text">
+                <span class="rank-change-name" id="ranked-result-my-rank">บรอนซ์</span>
+                <span class="rank-change-stars" id="ranked-result-my-stars">⭐⭐</span>
+              </div>
+            </div>
+          </div>
+          <div class="rank-change-divider">⚔️</div>
+          <div class="rank-change-item">
+            <span class="rank-change-label">คู่ต่อสู้</span>
+            <div class="rank-change-detail">
+              <img src="images/ranks/F.png" alt="" class="rank-change-img" id="ranked-result-opponent-img">
+              <div class="rank-change-text">
+                <span class="rank-change-name" id="ranked-result-opponent-rank">บรอนซ์</span>
+                <span class="rank-change-stars" id="ranked-result-opponent-stars">⭐⭐</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ranked-result-answer" id="ranked-result-answer" style="display:none">
+          <span class="info-label">คำตอบคือ</span>
+          <span class="creator-number" id="ranked-result-number">-</span>
+        </div>
+
+        <div class="winner-actions">
+          <button id="ranked-back-to-lobby-btn" class="btn btn-primary btn-lg">🔙 กลับไป lobby</button>
+          <button id="ranked-play-again-btn" class="btn btn-success btn-lg">⚔️ เล่นอีกครั้ง</button>
+        </div>
+      </div>
     </div>
   </div>
 

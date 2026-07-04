@@ -1433,7 +1433,383 @@ body {
 }
 
 /* ============================================================
-   RESPONSIVE
+   RANKED MODE
+   ============================================================ */
+
+/* --- Ranked Card (Lobby) --- */
+.ranked-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(239, 68, 68, 0.08));
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  position: relative;
+  overflow: hidden;
+}
+
+.ranked-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 30% 40%, rgba(245, 158, 11, 0.05) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.ranked-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ranked-card-info {
+  flex: 1;
+}
+
+.ranked-card-info .card-title {
+  margin-bottom: 4px;
+}
+
+.ranked-desc {
+  font-size: 12px;
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.ranked-current-rank {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+}
+
+.rank-badge-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ranked-rank-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rank-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rank-stars {
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+.ranked-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ranked-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.ranked-progress-fill {
+  height: 100%;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+  transition: width 0.5s ease;
+}
+
+.ranked-progress-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --- Ranked Queue Modal --- */
+.ranked-queue-modal {
+  text-align: center;
+  padding: 48px 36px;
+  max-width: 400px;
+}
+
+.ranked-queue-animation {
+  margin-bottom: 24px;
+}
+
+.searching-dots {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+}
+
+.searching-dots .dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent-1);
+  animation: dotPulse 1.4s ease-in-out infinite both;
+}
+
+.searching-dots .dot:nth-child(1) { animation-delay: -0.32s; }
+.searching-dots .dot:nth-child(2) { animation-delay: -0.16s; }
+.searching-dots .dot:nth-child(3) { animation-delay: 0s; }
+
+@keyframes dotPulse {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.ranked-queue-title {
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ranked-queue-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.ranked-queue-info {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+.ranked-queue-info strong {
+  color: var(--accent-1);
+}
+
+/* --- Ranked Screen --- */
+.ranked-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  flex: 1;
+  overflow-y: auto;
+  max-width: 700px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.ranked-opponents {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+.ranked-player-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 32px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  min-width: 160px;
+  transition: all 0.3s;
+}
+
+.ranked-player-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.ranked-player-avatar {
+  font-size: 48px;
+}
+
+.ranked-player-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ranked-player-rank {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.rank-mini-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ranked-player-rank span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ranked-vs {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: vsPulse 2s ease-in-out infinite;
+}
+
+@keyframes vsPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.ranked-game-area {
+  flex: 1;
+}
+
+.ranked-game-area .card {
+  text-align: center;
+}
+
+.ranked-role-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.ranked-role-desc strong {
+  color: var(--accent-1);
+}
+
+/* --- Ranked Result Modal --- */
+.ranked-result-modal {
+  text-align: center;
+  padding: 40px 32px;
+  max-width: 460px;
+  width: 90%;
+}
+
+.ranked-result-icon {
+  font-size: 72px;
+  display: block;
+  margin-bottom: 8px;
+  animation: bounce 1s ease infinite;
+}
+
+.ranked-result-title {
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.ranked-result-title:has(+ .ranked-result-desc:contains('ชนะ')) {
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ranked-result-desc {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+}
+
+.ranked-result-rank-change {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+}
+
+.rank-change-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.rank-change-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rank-change-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rank-change-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rank-change-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.rank-change-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rank-change-stars {
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+.rank-change-divider {
+  font-size: 20px;
+  color: var(--text-muted);
+}
+
+.ranked-result-answer {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.ranked-result-answer .info-label {
+  font-size: 13px;
+  margin-bottom: 0;
+}
+
+.ranked-result-answer .creator-number {
+  font-size: 28px;
+}
    ============================================================ */
 @media (max-width: 1024px) {
   .lobby-content {
