@@ -1,9 +1,8 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,51 +14,77 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3000;
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017';
 
 // Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname + '/public'));
 
-// ========== DATA FILES ==========
+// ========== MONGODB CONNECTION ==========
 
-const DATA_DIR = path.join(__dirname, 'data');
-const leaderboardFile = path.join(DATA_DIR, 'leaderboard.json');
-const usersFile = path.join(DATA_DIR, 'users.json');
-const ranksFile = path.join(DATA_DIR, 'ranks.json');
+let db;
+let configCollection;
 
-function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+async function connectDB() {
+  try {
+    const client = new MongoClient(MONGO_URI);
+    await client.connect();
+    db = client.db('guessgame');
+    configCollection = db.collection('config');
+    console.log('✅ Connected to MongoDB');
+    
+    // Create index on config key
+    await configCollection.createIndex({ key: 1 }, { unique: true });
+  } catch (e) {
+    console.error('❌ MongoDB connection failed:', e.message);
+    console.log('⚠️ Running without persistence - data will be lost on restart');
+    db = null;
+    configCollection = null;
   }
 }
-ensureDataDir();
+
+async function mongoGet(key) {
+  if (!configCollection) return null;
+  try {
+    const doc = await configCollection.findOne({ key });
+    return doc ? doc.value : null;
+  } catch { return null; }
+}
+
+async function mongoSet(key, value) {
+  if (!configCollection) return;
+  try {
+    await configCollection.replaceOne(
+      { key },
+      { key, value },
+      { upsert: true }
+    );
+  } catch (e) {
+    console.error(`Failed to save ${key}:`, e.message);
+  }
+}
 
 // ========== USER ACCOUNTS ==========
 
 let users = {};
 
-function loadUsers() {
-  try {
-    if (fs.existsSync(usersFile)) {
-      users = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
-      // Migrate old format if needed
-      if (Array.isArray(users)) {
-        const old = users;
-        users = {};
-        old.forEach(u => { users[u.username] = { passwordHash: u.passwordHash || u.password, createdAt: u.createdAt || new Date().toISOString() }; });
-      }
+async function loadUsers() {
+  const data = await mongoGet('users');
+  if (data) {
+    users = data;
+    // Migrate old array format
+    if (Array.isArray(users)) {
+      const old = users;
+      users = {};
+      old.forEach(u => { users[u.username] = { passwordHash: u.passwordHash || u.password, createdAt: u.createdAt || new Date().toISOString() }; });
     }
-  } catch (e) {
-    console.error('Failed to load users:', e.message);
+  } else {
     users = {};
   }
+  console.log(`👤 Users loaded: ${Object.keys(users).length}`);
 }
 
-function saveUsers() {
-  try {
-    fs.writeFileSync(usersFile, JSON.stringify(users, null, 2));
-  } catch (e) {
-    console.error('Failed to save users:', e.message);
-  }
+async function saveUsers() {
+  await mongoSet('users', users);
 }
 
 function hashPassword(password) {
@@ -71,13 +96,11 @@ function authenticateUser(username, password) {
   if (!cleanName || !password) return { ok: false, message: 'กรุณากรอกชื่อและรหัสผ่าน' };
 
   if (users[cleanName]) {
-    // Existing user - verify password
     if (users[cleanName].passwordHash === hashPassword(password)) {
       return { ok: true, username: cleanName, isNew: false };
     }
     return { ok: false, message: 'รหัสผ่านไม่ถูกต้อง' };
   } else {
-    // New user - register
     users[cleanName] = {
       passwordHash: hashPassword(password),
       createdAt: new Date().toISOString()
@@ -87,69 +110,45 @@ function authenticateUser(username, password) {
   }
 }
 
-loadUsers();
-
 // ========== LEADERBOARD ==========
 
 let leaderboard = [];
 
-function loadLeaderboard() {
-  try {
-    if (fs.existsSync(leaderboardFile)) {
-      const data = fs.readFileSync(leaderboardFile, 'utf8');
-      leaderboard = JSON.parse(data);
-      leaderboard = leaderboard.map(e => ({
-        username: e.username,
-        wins: typeof e.wins === 'number' ? e.wins : parseInt(e.wins) || 0
-      }));
-      leaderboard.sort((a, b) => b.wins - a.wins);
-    } else {
-      leaderboard = [];
-    }
-  } catch (e) {
-    console.error('Failed to load leaderboard:', e.message);
+async function loadLeaderboard() {
+  const data = await mongoGet('leaderboard');
+  if (data) {
+    leaderboard = data.map(e => ({
+      username: e.username,
+      wins: typeof e.wins === 'number' ? e.wins : parseInt(e.wins) || 0
+    }));
+    leaderboard.sort((a, b) => b.wins - a.wins);
+  } else {
     leaderboard = [];
   }
 }
 
-function saveLeaderboard() {
-  try {
-    fs.writeFileSync(leaderboardFile, JSON.stringify(leaderboard, null, 2));
-  } catch (e) {
-    console.error('Failed to save leaderboard:', e.message);
-  }
+async function saveLeaderboard() {
+  await mongoSet('leaderboard', leaderboard);
 }
-
-loadLeaderboard();
 
 // ========== RANKED MODE ==========
 
 const RANK_TIERS = ['F', 'E', 'D', 'C', 'B', 'A'];
 const RANK_NAMES = { F: 'บรอนซ์', E: 'เงิน', D: 'ทอง', C: 'แพลตตินัม', B: 'ไดมอนด์', A: 'มาสเตอร์' };
 const STARS_PER_RANK = 4;
-const WINS_PER_STAR = 2; // 2 wins = 1 star
+const WINS_PER_STAR = 2;
 
 let ranksData = {};
-let rankedQueue = []; // array of { socketId, username }
-let rankedMatches = {}; // rankedMatchId -> { ... game state }
+let rankedQueue = [];
+let rankedMatches = {};
 
-function loadRanks() {
-  try {
-    if (fs.existsSync(ranksFile)) {
-      ranksData = JSON.parse(fs.readFileSync(ranksFile, 'utf8'));
-    }
-  } catch (e) {
-    console.error('Failed to load ranks:', e.message);
-    ranksData = {};
-  }
+async function loadRanks() {
+  const data = await mongoGet('ranks');
+  ranksData = data || {};
 }
 
-function saveRanks() {
-  try {
-    fs.writeFileSync(ranksFile, JSON.stringify(ranksData, null, 2));
-  } catch (e) {
-    console.error('Failed to save ranks:', e.message);
-  }
+async function saveRanks() {
+  await mongoSet('ranks', ranksData);
 }
 
 function getDefaultRankData() {
@@ -173,15 +172,12 @@ function updateRankAfterWin(username) {
   rd.wins += 1;
   rd.winStreak += 1;
   
-  // starProgress: 0.5 per win (2 wins = 1 star)
   rd.starProgress += 0.5;
   
-  // Check if enough for a star
   if (rd.starProgress >= 1) {
     rd.starProgress -= 1;
     rd.stars += 1;
     
-    // Check if enough stars for rank up
     if (rd.stars >= STARS_PER_RANK) {
       const curIdx = getRankIndex(rd.rank);
       if (curIdx < RANK_TIERS.length - 1) {
@@ -189,14 +185,12 @@ function updateRankAfterWin(username) {
         rd.stars = 0;
         rd.starProgress = 0;
       } else {
-        // Already max rank (A), keep stars at max
         rd.stars = STARS_PER_RANK - 1;
         rd.starProgress = 0;
       }
     }
   }
   
-  // Track best rank
   if (getRankIndex(rd.rank) > getRankIndex(rd.bestRank)) {
     rd.bestRank = rd.rank;
   }
@@ -226,8 +220,6 @@ function getLeaderboardInfo(username) {
     bestRank: rd.bestRank
   };
 }
-
-loadRanks();
 
 // ========== GAME STATE ==========
 
@@ -1185,11 +1177,20 @@ setInterval(() => {
 
 // ========== START SERVER ==========
 
-server.listen(PORT, () => {
-  console.log('╔══════════════════════════════════════╗');
-  console.log('║     🎯 เกมทายเลขออนไลน์              ║');
-  console.log('║     เปิดให้บริการที่:                  ║');
-  console.log(`║     http://localhost:${PORT}              ║`);
-  console.log('╚══════════════════════════════════════╝');
-  console.log(`👤 Users loaded: ${Object.keys(users).length}`);
-});
+async function startServer() {
+  await connectDB();
+  await loadUsers();
+  await loadLeaderboard();
+  await loadRanks();
+
+  server.listen(PORT, () => {
+    console.log('╔══════════════════════════════════════╗');
+    console.log('║     🎯 เกมทายเลขออนไลน์              ║');
+    console.log('║     เปิดให้บริการที่:                  ║');
+    console.log(`║     http://localhost:${PORT}              ║`);
+    console.log('╚══════════════════════════════════════╝');
+    console.log(`👤 Users loaded: ${Object.keys(users).length}`);
+  });
+}
+
+startServer();

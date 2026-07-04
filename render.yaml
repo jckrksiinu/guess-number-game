@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: guess-number-game
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: MONGO_URI
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true
+    numInstances: 1
