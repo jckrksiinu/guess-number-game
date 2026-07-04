@@ -49,6 +49,7 @@ const dom = {
   navUsername: $('nav-username'),
   changeNameBtn: $('change-name-btn'),
   onlineCount: $('online-count'),
+  rankedNavBtn: $('ranked-nav-btn'),
   modeBtns: $$('.mode-btn'),
   setNumberInput: $('set-number-input'),
   createGameBtn: $('create-game-btn'),
@@ -108,6 +109,7 @@ const dom = {
   toastContainer: $('toast-container'),
   
   // Ranked
+  rankedNavBtn: $('ranked-nav-btn'),
   joinRankedBtn: $('join-ranked-btn'),
   rankedQueueOverlay: $('ranked-queue-overlay'),
   rankedQueueCount: $('ranked-queue-count'),
@@ -152,12 +154,21 @@ const dom = {
   rankedResultNumber: $('ranked-result-number'),
   rankedBackToLobbyBtn: $('ranked-back-to-lobby-btn'),
   rankedPlayAgainBtn: $('ranked-play-again-btn'),
-  rankedBadgeImg: $('ranked-badge-img'),
-  rankedRankLabel: $('ranked-rank-label'),
-  rankedRankStars: $('ranked-rank-stars'),
-  rankedProgressFill: $('ranked-progress-fill'),
-  rankedProgressText: $('ranked-progress-text')
-};
+  // Ranked Lobby
+  rankedLobbyScreen: $('ranked-lobby-screen'),
+  rankedLobbyBackBtn: $('ranked-lobby-back-btn'),
+  rankedLobbyJoinBtn: $('ranked-lobby-join-btn'),
+  rankedLobbyUsername: $('ranked-lobby-username'),
+  rankedLobbyBadgeImg: $('ranked-lobby-badge-img'),
+  rankedLobbyRankLabel: $('ranked-lobby-rank-label'),
+  rankedLobbyRankStars: $('ranked-lobby-rank-stars'),
+  rankedLobbyProgressFill: $('ranked-lobby-progress-fill'),
+  rankedLobbyProgressText: $('ranked-lobby-progress-text'),
+  rankedLobbyWins: $('ranked-lobby-wins'),
+  rankedLobbyLosses: $('ranked-lobby-losses'),
+  rankedLobbyWinrate: $('ranked-lobby-winrate'),
+  rankedLobbyOnline: $('ranked-lobby-online'),
+  rankedLeaderboardContainer: $('ranked-leaderboard-container')
 
 // ========== SOCKET ==========
 let socket;
@@ -192,6 +203,7 @@ function initSocket() {
     state.username = data.username;
     dom.displayUsername.textContent = state.username;
     dom.gameUsernameDisplay.textContent = state.username;
+    dom.rankedLobbyUsername.textContent = state.username;
     
     if (data.isNew) {
       showToast(`✅ สมัครสมาชิก "${state.username}" สำเร็จ!`, 'success');
@@ -224,6 +236,11 @@ function initSocket() {
   // --- Leaderboard ---
   socket.on('leaderboard', (data) => {
     renderLeaderboard(data);
+  });
+
+  // --- Ranked Leaderboard ---
+  socket.on('ranked_leaderboard', (data) => {
+    renderRankedLeaderboard(data);
   });
 
   // --- Game Created (as creator) ---
@@ -542,6 +559,7 @@ function initSocket() {
   // --- Online Count ---
   socket.on('online_count', (count) => {
     dom.onlineCount.textContent = `👥 ออนไลน์: ${count}`;
+    dom.rankedLobbyOnline.textContent = `👥 ออนไลน์: ${count}`;
   });
 
   // ========== RANKED MODE EVENTS ==========
@@ -550,7 +568,7 @@ function initSocket() {
   socket.on('rank_info', (data) => {
     if (data) {
       state.rankedMyRank = data;
-      updateRankedDisplay(data);
+      updateRankedLobbyDisplay(data);
     }
   });
 
@@ -653,7 +671,7 @@ function initSocket() {
       state.rankedMyRank = data.setterRank;
     }
     if (state.rankedMyRank) {
-      updateRankedDisplay(state.rankedMyRank);
+      updateRankedLobbyDisplay(state.rankedMyRank);
     }
     
     dom.rankedResultModal.style.display = 'flex';
@@ -664,9 +682,8 @@ function initSocket() {
     dom.rankedScreen.classList.remove('active');
     showToast(`❌ แมตช์ถูกยกเลิก: ${data.reason}`, 'error');
     resetRankedState();
-    showScreen('lobby-screen');
+    showScreen('ranked-lobby-screen');
     if (socket && socket.connected) {
-      socket.emit('join_lobby', { username: state.username });
       socket.emit('get_rank_info', { username: state.username });
     }
   });
@@ -858,6 +875,24 @@ dom.refreshGamesBtn.addEventListener('click', () => {
 // --- Login Button ---
 dom.loginBtn.addEventListener('click', handleLogin);
 
+// --- Ranked Nav Button ---
+dom.rankedNavBtn.addEventListener('click', () => {
+  showScreen('ranked-lobby-screen');
+  if (socket && socket.connected) {
+    socket.emit('get_rank_info', { username: state.username });
+    socket.emit('get_ranked_leaderboard');
+  }
+});
+
+// --- Ranked Lobby Back Button ---
+dom.rankedLobbyBackBtn.addEventListener('click', () => {
+  showScreen('lobby-screen');
+  if (socket && socket.connected) {
+    socket.emit('join_lobby', { username: state.username });
+    socket.emit('get_rank_info', { username: state.username });
+  }
+});
+
 // --- Change Name ---
 dom.changeNameBtn.addEventListener('click', () => {
   const newName = prompt('ใส่ชื่อใหม่:', state.username);
@@ -865,6 +900,7 @@ dom.changeNameBtn.addEventListener('click', () => {
     state.username = newName.trim().slice(0, 15);
     dom.displayUsername.textContent = state.username;
     dom.gameUsernameDisplay.textContent = state.username;
+    dom.rankedLobbyUsername.textContent = state.username;
     if (socket && socket.connected) {
       socket.emit('join_lobby', { username: state.username });
       socket.emit('get_rank_info', { username: state.username });
@@ -1083,28 +1119,37 @@ function getRankImagePath(rank) {
   return `images/ranks/${rank || 'F'}.png`;
 }
 
-function updateRankedDisplay(data) {
+function updateRankedLobbyDisplay(data) {
   if (!data) return;
   const rank = data.rank || 'F';
   const stars = data.stars || 0;
   const starsText = '⭐'.repeat(stars) + '☆'.repeat(Math.max(0, 4 - stars));
   
-  dom.rankedBadgeImg.src = getRankImagePath(rank);
-  dom.rankedRankLabel.textContent = `${RANK_NAMES[rank] || 'บรอนซ์'} (${rank})`;
-  dom.rankedRankStars.textContent = starsText;
+  dom.rankedLobbyBadgeImg.src = getRankImagePath(rank);
+  dom.rankedLobbyRankLabel.textContent = `${RANK_NAMES[rank] || 'บรอนซ์'} (${rank})`;
+  dom.rankedLobbyRankStars.textContent = starsText;
   
   // Progress bar
   const progress = data.starProgress || 0;
   const pct = (progress / 1) * 100;
-  dom.rankedProgressFill.style.width = Math.min(pct, 100) + '%';
+  dom.rankedLobbyProgressFill.style.width = Math.min(pct, 100) + '%';
   
   const totalStars = data.stars;
-  dom.rankedProgressText.textContent = `${totalStars} / 4 ⭐`;
+  dom.rankedLobbyProgressText.textContent = `${totalStars} / 4 ⭐`;
   
   if (rank === 'A') {
-    dom.rankedProgressText.textContent = '🥇 สูงสุดแล้ว!';
-    dom.rankedProgressFill.style.width = '100%';
+    dom.rankedLobbyProgressText.textContent = '🥇 สูงสุดแล้ว!';
+    dom.rankedLobbyProgressFill.style.width = '100%';
   }
+  
+  // Stats
+  const wins = data.wins || 0;
+  const losses = data.losses || 0;
+  const total = wins + losses;
+  const winrate = total > 0 ? Math.round((wins / total) * 100) : 0;
+  dom.rankedLobbyWins.textContent = wins;
+  dom.rankedLobbyLosses.textContent = losses;
+  dom.rankedLobbyWinrate.textContent = winrate + '%';
 }
 
 function enterRankedScreen(data) {
@@ -1232,10 +1277,18 @@ function resetRankedState() {
   dom.rankedResultModal.style.display = 'none';
   dom.rankedQueueOverlay.style.display = 'none';
   dom.rankedScreen.classList.remove('active');
+  
+  // Reset ranked game areas
+  dom.rankedSetterArea.style.display = 'none';
+  dom.rankedGuesserWaiting.style.display = 'none';
+  dom.rankedGuessingArea.style.display = 'none';
+  dom.rankedSetterWaiting.style.display = 'none';
+  dom.rankedGuessFeedback.style.display = 'none';
+  dom.rankedGuessProgress.style.display = 'none';
 }
 
 // --- Join Ranked Queue ---
-dom.joinRankedBtn.addEventListener('click', () => {
+dom.rankedLobbyJoinBtn.addEventListener('click', () => {
   if (!state.username) {
     showToast('กรุณาเข้าสู่ระบบก่อน', 'error');
     return;
@@ -1313,18 +1366,17 @@ dom.rankedLeaveBtn.addEventListener('click', () => {
     socket.emit('leave_game', { gameId: state.rankedMatchId });
   }
   resetRankedState();
-  showScreen('lobby-screen');
+  showScreen('ranked-lobby-screen');
   if (socket && socket.connected) {
-    socket.emit('join_lobby', { username: state.username });
+    socket.emit('get_rank_info', { username: state.username });
   }
 });
 
 // --- Ranked Back to Lobby ---
 dom.rankedBackToLobbyBtn.addEventListener('click', () => {
   resetRankedState();
-  showScreen('lobby-screen');
+  showScreen('ranked-lobby-screen');
   if (socket && socket.connected) {
-    socket.emit('join_lobby', { username: state.username });
     socket.emit('get_rank_info', { username: state.username });
   }
 });
@@ -1431,6 +1483,50 @@ function renderLeaderboard(data) {
         <span class="leaderboard-rank">${rankDisplay}</span>
         <span class="leaderboard-name">${entry.username} ${isMe ? '(คุณ)' : ''}</span>
         <span class="leaderboard-wins">${entry.wins}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderRankedLeaderboard(data) {
+  const container = dom.rankedLeaderboardContainer;
+  
+  if (!data || data.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🏆</div>
+        <p>ยังไม่มีข้อมูล</p>
+        <p class="empty-sub">เล่นแมตช์จัดอันดับเพื่อเริ่มต้น</p>
+      </div>
+    `;
+    return;
+  }
+  
+  const medals = ['🥇', '🥈', '🥉'];
+  const rankOrder = ['F','E','D','C','B','A'];
+  
+  container.innerHTML = data.slice(0, 50).map((entry, index) => {
+    const rank = index + 1;
+    let topClass = '';
+    let rankDisplay = rank;
+    
+    if (rank === 1) topClass = 'top-1';
+    else if (rank === 2) topClass = 'top-2';
+    else if (rank === 3) topClass = 'top-3';
+    
+    if (rank <= 3) rankDisplay = medals[rank - 1];
+    
+    const isMe = entry.username === state.username;
+    const tierIndex = rankOrder.indexOf(entry.rank);
+    const starText = '⭐'.repeat(entry.stars || 0);
+    
+    return `
+      <div class="leaderboard-item ${topClass}">
+        <span class="leaderboard-rank">${rankDisplay}</span>
+        <span class="leaderboard-name">${entry.username} ${isMe ? '(คุณ)' : ''}</span>
+        <span class="leaderboard-wins" style="display:flex;align-items:center;gap:4px">
+          ${starText}<span style="font-size:10px;opacity:0.6">${entry.rank}</span>
+        </span>
       </div>
     `;
   }).join('');

@@ -1042,6 +1042,27 @@ io.on('connection', (socket) => {
     socket.emit('rank_info', rd);
   });
 
+  // --- RANKED LEADERBOARD ---
+  socket.on('get_ranked_leaderboard', () => {
+    const rankedList = Object.entries(ranksData).map(([username, data]) => ({
+      username,
+      rank: data.rank,
+      stars: data.stars,
+      wins: data.wins || 0,
+      losses: data.losses || 0,
+      total: (data.wins || 0) + (data.losses || 0)
+    }));
+    
+    const rankOrder = { 'A': 6, 'B': 5, 'C': 4, 'D': 3, 'E': 2, 'F': 1 };
+    rankedList.sort((a, b) => {
+      const diff = (rankOrder[b.rank] || 0) - (rankOrder[a.rank] || 0);
+      if (diff !== 0) return diff;
+      return (b.stars || 0) - (a.stars || 0);
+    });
+    
+    socket.emit('ranked_leaderboard', rankedList.slice(0, 50));
+  });
+
   // --- DISCONNECT ---
   socket.on('disconnect', () => {
     const info = playerSockets[socket.id];

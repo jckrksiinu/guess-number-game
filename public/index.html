@@ -55,6 +55,7 @@
           <span class="nav-status" id="online-count">👥 ออนไลน์: 0</span>
         </div>
         <div class="nav-right">
+          <button id="ranked-nav-btn" class="btn btn-sm nav-ranked-btn" title="โหมดจัดอันดับ">🏆 จัดอันดับ</button>
           <span class="nav-user">👤 <span id="display-username"></span></span>
           <button id="change-name-btn" class="btn btn-sm" title="เปลี่ยนชื่อ">✏️</button>
         </div>
@@ -145,32 +146,6 @@
               </div>
             </div>
           </div>
-
-          <!-- Ranked Mode Card -->
-          <div class="card glass ranked-card">
-            <div class="ranked-card-header">
-              <div class="ranked-card-info">
-                <h2 class="card-title">🏆 โหมดจัดอันดับ</h2>
-                <p class="ranked-desc">จับคู่ 1v1 สะสมดาว เลื่อนแรงค์!</p>
-              </div>
-              <div class="ranked-current-rank" id="ranked-current-display">
-                <img src="images/ranks/F.png" alt="Rank" class="rank-badge-img" id="ranked-badge-img">
-                <div class="ranked-rank-text">
-                  <span class="rank-label" id="ranked-rank-label">บรอนซ์</span>
-                  <span class="rank-stars" id="ranked-rank-stars"></span>
-                </div>
-              </div>
-            </div>
-            <div class="ranked-progress">
-              <div class="ranked-progress-bar">
-                <div class="ranked-progress-fill" id="ranked-progress-fill" style="width:0%"></div>
-              </div>
-              <span class="ranked-progress-text" id="ranked-progress-text">0 / 4 ⭐</span>
-            </div>
-            <button id="join-ranked-btn" class="btn btn-primary btn-lg btn-full">
-              ⚔️ เล่นจัดอันดับ
-            </button>
-          </div>
         </div>
 
         <!-- Right Column - Leaderboard -->
@@ -185,6 +160,116 @@
                 <div class="empty-icon">🏆</div>
                 <p>ยังไม่มีผู้ชนะ</p>
                 <p class="empty-sub">มาเป็นคนแรกเลย!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RANKED LOBBY SCREEN ============ -->
+    <div id="ranked-lobby-screen" class="screen">
+      <!-- Top Navigation -->
+      <nav class="top-nav glass">
+        <div class="nav-left">
+          <button id="ranked-lobby-back-btn" class="btn btn-back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span>กลับ</span>
+          </button>
+          <span class="nav-logo">🏆 โหมดจัดอันดับ</span>
+        </div>
+        <div class="nav-center">
+          <span class="nav-status" id="ranked-lobby-online">👥 ออนไลน์: 0</span>
+        </div>
+        <div class="nav-right">
+          <span class="nav-user">👤 <span id="ranked-lobby-username"></span></span>
+        </div>
+      </nav>
+
+      <div class="ranked-lobby-content">
+        <!-- Left: Rank Info Card -->
+        <div class="ranked-lobby-main">
+          <div class="card glass ranked-lobby-card">
+            <div class="ranked-lobby-header">
+              <h2 class="card-title">🔥 อันดับของคุณ</h2>
+              <div class="ranked-lobby-rank-display">
+                <img src="images/ranks/F.png" alt="Rank" class="ranked-lobby-badge" id="ranked-lobby-badge-img">
+                <div class="ranked-lobby-rank-info">
+                  <span class="ranked-lobby-rank-name" id="ranked-lobby-rank-label">บรอนซ์ (F)</span>
+                  <span class="ranked-lobby-stars" id="ranked-lobby-rank-stars"></span>
+                </div>
+              </div>
+            </div>
+            <div class="ranked-lobby-progress">
+              <div class="ranked-progress-bar">
+                <div class="ranked-progress-fill" id="ranked-lobby-progress-fill" style="width:0%"></div>
+              </div>
+              <span class="ranked-progress-text" id="ranked-lobby-progress-text">0 / 4 ⭐</span>
+            </div>
+            <div class="ranked-lobby-stats" id="ranked-lobby-stats">
+              <div class="ranked-stat-item">
+                <span class="ranked-stat-value" id="ranked-lobby-wins">0</span>
+                <span class="ranked-stat-label">ชนะ</span>
+              </div>
+              <div class="ranked-stat-item">
+                <span class="ranked-stat-value" id="ranked-lobby-losses">0</span>
+                <span class="ranked-stat-label">แพ้</span>
+              </div>
+              <div class="ranked-stat-item">
+                <span class="ranked-stat-value" id="ranked-lobby-winrate">0%</span>
+                <span class="ranked-stat-label">ชนะ</span>
+              </div>
+            </div>
+            <button id="ranked-lobby-join-btn" class="btn btn-primary btn-lg btn-full">
+              ⚔️ ค้นหาแมตช์
+            </button>
+            <p class="form-hint" style="text-align:center;margin-top:8px">จับคู่ 1v1 สะสมดาว เลื่อนแรงค์!</p>
+          </div>
+
+          <!-- Rank Info Tiers -->
+          <div class="card glass rank-tiers-card">
+            <h3 class="card-title">🏅 ลำดับแรงค์</h3>
+            <div class="rank-tiers-list" id="rank-tiers-list">
+              <div class="rank-tier-item">
+                <img src="images/ranks/A.png" alt="A" class="rank-tier-img">
+                <span class="rank-tier-name">มาสเตอร์ (A)</span>
+              </div>
+              <div class="rank-tier-item">
+                <img src="images/ranks/B.png" alt="B" class="rank-tier-img">
+                <span class="rank-tier-name">ไดมอนด์ (B)</span>
+              </div>
+              <div class="rank-tier-item">
+                <img src="images/ranks/C.png" alt="C" class="rank-tier-img">
+                <span class="rank-tier-name">แพลตตินัม (C)</span>
+              </div>
+              <div class="rank-tier-item">
+                <img src="images/ranks/D.png" alt="D" class="rank-tier-img">
+                <span class="rank-tier-name">ทอง (D)</span>
+              </div>
+              <div class="rank-tier-item">
+                <img src="images/ranks/E.png" alt="E" class="rank-tier-img">
+                <span class="rank-tier-name">เงิน (E)</span>
+              </div>
+              <div class="rank-tier-item">
+                <img src="images/ranks/F.png" alt="F" class="rank-tier-img">
+                <span class="rank-tier-name">บรอนซ์ (F)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Ranked Leaderboard -->
+        <div class="ranked-lobby-sidebar">
+          <div class="card glass ranked-leaderboard-card">
+            <div class="card-header">
+              <h2 class="card-title">🏆 จัดอันดับผู้เล่น</h2>
+              <span class="badge">RANK</span>
+            </div>
+            <div id="ranked-leaderboard-container">
+              <div class="empty-state">
+                <div class="empty-icon">🏆</div>
+                <p>ยังไม่มีข้อมูล</p>
+                <p class="empty-sub">เล่นแมตช์จัดอันดับเพื่อเริ่มต้น</p>
               </div>
             </div>
           </div>
